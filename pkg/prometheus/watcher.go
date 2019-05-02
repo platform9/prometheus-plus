@@ -13,6 +13,7 @@ import (
 
 	"k8s.io/client-go/rest"
 
+	"github.com/platform9/monhelper/pkg/util"
 	"github.com/spf13/viper"
 
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -22,7 +23,6 @@ import (
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	monitoringclient "github.com/coreos/prometheus-operator/pkg/client/versioned"
 	"github.com/pkg/errors"
-	"github.com/platform9/monhelper/pkg/util"
 	log "github.com/sirupsen/logrus"
 	v1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -257,6 +257,28 @@ func (w *Watcher) handlePrometheusAdd(obj interface{}) {
 	enqueue(w.promQueue, key)
 }
 
+func (w *Watcher) checkSvcExists(ns string, annotations map[string]string) (bool, error) {
+	if annotations == nil {
+		return false, nil
+	}
+
+	svcName, ok := annotations["service"]
+	if !ok {
+		return false, nil
+	}
+
+	_, err := w.client.CoreV1().Services(ns).Get(svcName, metav1.GetOptions{})
+
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return true, nil
+}
+
 func (w *Watcher) handlePrometheusDelete(obj interface{}) {
 	key, ok := keyFunc(obj)
 	if !ok {
@@ -268,8 +290,9 @@ func (w *Watcher) handlePrometheusDelete(obj interface{}) {
 	enqueue(w.promQueue, key)
 }
 
-func (w *Watcher) createSvc(obj metav1.ObjectMeta, kind string, selector map[string]string, port int32, portName, svcName string) error {
+func (w *Watcher) createSvc(obj metav1.ObjectMeta, kind string, selector map[string]string, port int32, portName string) error {
 	svcClient := w.client.CoreV1().Services(obj.GetNamespace())
+	svcName := fmt.Sprintf("%s-%s", obj.GetName(), util.RandString(suffixLen))
 	_, err := svcClient.Get(svcName, metav1.GetOptions{})
 	if err == nil {
 		return nil
@@ -310,9 +333,12 @@ func (w *Watcher) createSvc(obj metav1.ObjectMeta, kind string, selector map[str
 		},
 	}
 
-	if _, err := svcClient.Create(svc); err != nil {
+	if svc, err = svcClient.Create(svc); err != nil {
 		return err
 	}
+
+	obj.Annotations["service"] = svcName
+	obj.Annotations["service_path"] = fmt.Sprintf("%s:%s/proxy", svc.SelfLink, portName)
 
 	return nil
 }
@@ -332,22 +358,24 @@ func (w *Watcher) syncPrometheus(key string) error {
 
 	log.Infof("syncing prometheus: %s", key)
 
-	if p.Annotations != nil {
-		if _, ok := p.Annotations["service"]; ok {
-			return nil
-		}
+	exists, err = w.checkSvcExists(p.Namespace, p.Annotations)
+	if err != nil {
+		return err
 	}
 
-	svcName := fmt.Sprintf("%s-%s", p.Name, util.RandString(suffixLen))
+	if exists {
+		log.Infof("service for prometheus: %s exists", key)
+		return nil
+	}
+
 	err = w.createSvc(p.ObjectMeta, monitoringv1.PrometheusesKind, map[string]string{
 		"prometheus": p.Name,
-	}, prometheusPort, "web", svcName)
+	}, prometheusPort, "web")
 
 	if err != nil {
 		return err
 	}
 
-	p.Annotations["service"] = svcName
 	_, err = w.mClient.MonitoringV1().Prometheuses(p.Namespace).Update(p)
 	return err
 }
@@ -389,22 +417,24 @@ func (w *Watcher) syncAlertManager(key string) error {
 
 	log.Infof("syncing alert manager: %s", key)
 
-	if am.Annotations != nil {
-		if _, ok := am.Annotations["service"]; ok {
-			return nil
-		}
+	exists, err = w.checkSvcExists(am.Namespace, am.Annotations)
+	if err != nil {
+		return err
 	}
 
-	svcName := fmt.Sprintf("%s-%s", am.Name, util.RandString(suffixLen))
+	if exists {
+		log.Infof("service for alertmanager: %s exists", key)
+		return nil
+	}
+
 	err = w.createSvc(am.ObjectMeta, monitoringv1.AlertmanagersKind, map[string]string{
 		"alertmanager": am.Name,
-	}, alertmanagerPort, "web", svcName)
+	}, alertmanagerPort, "web")
 
 	if err != nil {
 		return err
 	}
 
-	am.Annotations["service"] = svcName
 	_, err = w.mClient.MonitoringV1().Alertmanagers(am.Namespace).Update(am)
 	return err
 }

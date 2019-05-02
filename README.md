@@ -3,24 +3,25 @@ Helper service to enhance prometheus-operator
 
 Currently, monhelper runs alongside prometheus-operator and watches changes to Prometheus and AlertManager objects.
 For new instances, it creates service objects to front prometheus/alertmanager pods. These services can be located by
-inspecting annotations for corresponding prometheus objects and locating *service* key.
+inspecting annotations for corresponding prometheus objects and locating *service_path* key.
 
 ```yaml
-k get prometheus/prometheus -o yaml
+ k get prometheus/prometheus -o yaml
 apiVersion: monitoring.coreos.com/v1
 kind: Prometheus
 metadata:
   annotations:
     kubectl.kubernetes.io/last-applied-configuration: |
       {"apiVersion":"monitoring.coreos.com/v1","kind":"Prometheus","metadata":{"annotations":{},"name":"prometheus","namespace":"default"},"spec":{"enableAdminAPI":false,"resources":{"requests":{"memory":"400Mi"}},"serviceAccountName":"prometheus","serviceMonitorSelector":{"matchLabels":{"team":"frontend"}}}}
-    service: prometheus-c2vnnfa7
-  creationTimestamp: 2019-04-30T13:53:55Z
+    service: prometheus-0jq3ofdu
+    service_path: /api/v1/namespaces/default/services/prometheus-0jq3ofdu:web/proxy
+  creationTimestamp: 2019-05-02T00:40:37Z
   generation: 2
   name: prometheus
   namespace: default
-  resourceVersion: "67438"
+  resourceVersion: "4693"
   selfLink: /apis/monitoring.coreos.com/v1/namespaces/default/prometheuses/prometheus
-  uid: 64e54969-6b4f-11e9-a54b-b230d89ff249
+  uid: e7205dce-6c72-11e9-bfd3-0a190cacc41f
 spec:
   resources:
     requests:
