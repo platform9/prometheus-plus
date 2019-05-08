@@ -290,16 +290,17 @@ func (w *Watcher) handlePrometheusDelete(obj interface{}) {
 	enqueue(w.promQueue, key)
 }
 
-func (w *Watcher) createSvc(obj metav1.ObjectMeta, kind string, selector map[string]string, port int32, portName string) error {
+func (w *Watcher) createSvc(obj metav1.ObjectMeta, kind string, selector map[string]string, port int32, portName string) (map[string]string, error) {
 	svcClient := w.client.CoreV1().Services(obj.GetNamespace())
 	svcName := fmt.Sprintf("%s-%s", obj.GetName(), util.RandString(suffixLen))
+	annotations := map[string]string{}
 	_, err := svcClient.Get(svcName, metav1.GetOptions{})
 	if err == nil {
-		return nil
+		return annotations, nil
 	}
 
 	if !apierrors.IsNotFound(err) {
-		return err
+		return annotations, err
 	}
 
 	trueVar := true
@@ -334,13 +335,31 @@ func (w *Watcher) createSvc(obj metav1.ObjectMeta, kind string, selector map[str
 	}
 
 	if svc, err = svcClient.Create(svc); err != nil {
-		return err
+		return annotations, err
 	}
 
-	obj.Annotations["service"] = svcName
-	obj.Annotations["service_path"] = fmt.Sprintf("%s:%s/proxy", svc.SelfLink, portName)
+	annotations["service"] = svcName
+	annotations["service_path"] = fmt.Sprintf("%s:%s/proxy", svc.SelfLink, portName)
 
-	return nil
+	return annotations, nil
+}
+
+func merge(a, b map[string]string) map[string]string {
+	if a == nil {
+		return b
+	}
+
+	if b == nil {
+		return a
+	}
+
+	for k, v := range b {
+		if _, ok := a[k]; !ok {
+			a[k] = v
+		}
+	}
+
+	return a
 }
 
 func (w *Watcher) syncPrometheus(key string) error {
@@ -368,7 +387,7 @@ func (w *Watcher) syncPrometheus(key string) error {
 		return nil
 	}
 
-	err = w.createSvc(p.ObjectMeta, monitoringv1.PrometheusesKind, map[string]string{
+	annotations, err := w.createSvc(p.ObjectMeta, monitoringv1.PrometheusesKind, map[string]string{
 		"prometheus": p.Name,
 	}, prometheusPort, "web")
 
@@ -376,6 +395,7 @@ func (w *Watcher) syncPrometheus(key string) error {
 		return err
 	}
 
+	p.ObjectMeta.Annotations = merge(p.ObjectMeta.Annotations, annotations)
 	_, err = w.mClient.MonitoringV1().Prometheuses(p.Namespace).Update(p)
 	return err
 }
@@ -427,7 +447,7 @@ func (w *Watcher) syncAlertManager(key string) error {
 		return nil
 	}
 
-	err = w.createSvc(am.ObjectMeta, monitoringv1.AlertmanagersKind, map[string]string{
+	annotations, err := w.createSvc(am.ObjectMeta, monitoringv1.AlertmanagersKind, map[string]string{
 		"alertmanager": am.Name,
 	}, alertmanagerPort, "web")
 
@@ -435,6 +455,7 @@ func (w *Watcher) syncAlertManager(key string) error {
 		return err
 	}
 
+	am.ObjectMeta.Annotations = merge(am.ObjectMeta.Annotations, annotations)
 	_, err = w.mClient.MonitoringV1().Alertmanagers(am.Namespace).Update(am)
 	return err
 }
