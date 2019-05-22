@@ -1,7 +1,7 @@
 src_dir=$(shell pwd)
 build_dir=${src_dir}/build
 bin_dir=${build_dir}/bin
-prog_name=monhelper
+prog_name=promplus
 pkg=cmd/main.go
 go_cmd=go
 repo=platform9

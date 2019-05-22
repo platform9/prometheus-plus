@@ -12,7 +12,7 @@ import (
 	"os/signal"
 	"syscall"
 
-	prometheus "github.com/platform9/monhelper/pkg/prometheus"
+	prometheus "github.com/platform9/prometheus-plus/pkg/prometheus"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"

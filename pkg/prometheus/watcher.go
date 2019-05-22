@@ -13,7 +13,7 @@ import (
 
 	"k8s.io/client-go/rest"
 
-	"github.com/platform9/monhelper/pkg/util"
+	"github.com/platform9/prometheus-plus/pkg/util"
 	"github.com/spf13/viper"
 
 	"k8s.io/apimachinery/pkg/util/intstr"

@@ -1,8 +1,8 @@
 
 FROM alpine:latest
 
-COPY build/bin/monhelper /bin/
+COPY build/bin/promplus /bin/
 
-RUN chmod +x /bin/monhelper
+RUN chmod +x /bin/promplus
 
-ENTRYPOINT [ "/bin/monhelper" ]
+ENTRYPOINT [ "/bin/promplus" ]
