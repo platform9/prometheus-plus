@@ -1,7 +1,7 @@
-# monhelper
-Helper service to enhance prometheus-operator
+# promplus
+Enhances prometheus-operator
 
-Currently, monhelper runs alongside prometheus-operator and watches changes to Prometheus and AlertManager objects.
+Currently, promplus runs alongside prometheus-operator and watches changes to Prometheus and AlertManager objects.
 For new instances, it creates service objects to front prometheus/alertmanager pods. These services can be located by
 inspecting annotations for corresponding prometheus objects and locating *service_path* key.
 
