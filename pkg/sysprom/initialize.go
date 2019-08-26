@@ -214,9 +214,49 @@ func CreatePrometheusRules(w *InitConfig) error {
 				monitoringv1.RuleGroup{
 					Name: "system-rule-group",
 					Rules: []monitoringv1.Rule{
-						monitoringv1.Rule{
-							Alert: "sysalert",
-							Expr:  intstr.FromString("node_memory_Active_bytes > 689573120"), // 1000000000
+						monitoringv1.Rule{ // Main memory less than 90% available
+							Alert: "OutofMemory",
+							Expr:  intstr.FromString("(node_memory_MemFree_bytes + node_memory_Cached_bytes + node_memory_Buffers_bytes) / node_memory_MemTotal_bytes * 100 < 90"),
+							For:   "5m",
+						},
+						monitoringv1.Rule{ // Receiving data on network > 100 mb/s
+							Alert: "UnusualNetworkThroughputIn",
+							Expr:  intstr.FromString("sum by (instance) (irate(node_network_receive_bytes_total[2m])) / 1024 / 1024 > 100"),
+							For:   "5m",
+						},
+						monitoringv1.Rule{ // Sending data on network > 100 mb/s
+							Alert: "UnusualNetworkThroughputOut",
+							Expr:  intstr.FromString("sum by (instance) (irate(node_network_transmit_bytes_total[2m])) / 1024 / 1024 > 100"),
+							For:   "5m",
+						},
+						monitoringv1.Rule{ // Disk reading too much data > 50 mb/s
+							Alert: "UnusualDiskReadRate",
+							Expr:  intstr.FromString("sum by (instance) (irate(node_disk_read_bytes_total[2m])) / 1024 / 1024 > 50"),
+							For:   "5m",
+						},
+						monitoringv1.Rule{ // Disk writing much data 50 mb/s
+							Alert: "UnusualDiskWriteRate",
+							Expr:  intstr.FromString("sum by (instance) (irate(node_disk_written_bytes_total[2m])) / 1024 / 1024 > 50"),
+							For:   "5m",
+						},
+						monitoringv1.Rule{ // Very high disk read latency > 100 ms
+							Alert: "UnusualDiskReadLatency",
+							Expr:  intstr.FromString("rate(node_disk_read_time_seconds_total[1m]) / rate(node_disk_reads_completed_total[1m]) > 100"),
+							For:   "5m",
+						},
+						monitoringv1.Rule{ // Very high disk write latency > 100 ms
+							Alert: "UnusualDiskWriteLatency",
+							Expr:  intstr.FromString("rate(node_disk_write_time_seconds_total[1m]) / rate(node_disk_writes_completed_total[1m]) > 100"),
+							For:   "5m",
+						},
+						monitoringv1.Rule{ // High CPU load > 80%
+							Alert: "HighCpuLoad",
+							Expr:  intstr.FromString("100 - (avg by(instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100) > 80"),
+							For:   "5m",
+						},
+						monitoringv1.Rule{ // Swap is filling up > 80%
+							Alert: "SwapIsFillingUp",
+							Expr:  intstr.FromString("(1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) * 100 > 80"),
 							For:   "5m",
 						},
 					},
