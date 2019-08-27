@@ -48,16 +48,9 @@ func Main() int {
 	init := viper.GetBool("initmode")
 	if init == true {
 		log.Info("Starting in Init mode")
-		syspc, err := sysprom.New()
-		if err != nil {
-			log.Error(err, "when starting system prometheus controller")
-			return 1
+		if err := sysprom.SetupSystemPrometheus(); err != nil {
+			log.Fatal(err, "while deploying system prometheus")
 		}
-		sysprom.CreateRBAC(syspc)
-		sysprom.CreatePrometheus(syspc)
-		sysprom.CreatePrometheusRules(syspc)
-		sysprom.CreateServiceMonitor(syspc)
-		sysprom.CreateAlertManager(syspc)
 
 		return 0
 	}

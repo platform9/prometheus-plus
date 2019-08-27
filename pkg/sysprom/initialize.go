@@ -17,23 +17,24 @@ package sysprom
 */
 
 import (
-	"log"
+	"io/ioutil"
 	"os"
 	"path"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	monitoringclient "github.com/coreos/prometheus-operator/pkg/client/versioned"
 	prometheus "github.com/coreos/prometheus-operator/pkg/client/versioned/typed/monitoring/v1"
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	rbac "k8s.io/api/rbac/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
-	"k8s.io/client-go/rest"
-
-	"github.com/pkg/errors"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 )
 
@@ -41,6 +42,7 @@ const (
 	prometheusPort   = 9090
 	alertmanagerPort = 9093
 	monitoringNS     = "pf9-monitoring"
+	configDir        = "/etc/pf9/config"
 )
 
 // InitConfig stores configuration all system prometheus objects
@@ -51,7 +53,7 @@ type InitConfig struct {
 }
 
 // New returns new instance of InitConfig
-func New() (*InitConfig, error) {
+func new() (*InitConfig, error) {
 	// TODO: make flag-dependent
 	switch viper.GetString("mode") {
 	case "standalone":
@@ -104,8 +106,36 @@ func getByKubeCfg() (*InitConfig, error) {
 	return buildInitConfig(cfg)
 }
 
+// SetupSystemPrometheus deployment on a new PMK cluster
+func SetupSystemPrometheus() error {
+	syspc, err := new()
+	if err != nil {
+		log.Fatal(err, "when starting system prometheus controller")
+	}
+	if err := createRBAC(syspc); err != nil {
+		log.Fatal(err, "while setting up RBAC for prometheus")
+	}
+	if err := createPrometheus(syspc); err != nil {
+		log.Fatal(err, "while creating prometheus instance")
+	}
+	if err := createPrometheusRules(syspc); err != nil {
+		log.Fatal(err, "while creating prometheus rules")
+	}
+	if err := createServiceMonitor(syspc); err != nil {
+		log.Fatal(err, "while creating service-monitor instance")
+	}
+	if err := createAlertManager(syspc); err != nil {
+		log.Fatal(err, "while creating alert-manager instance")
+	}
+	if err := createGrafana(syspc); err != nil {
+		log.Fatal(err, "while creating grafana instance")
+	}
+
+	return nil
+}
+
 //CreatePrometheus resource
-func CreatePrometheus(w *InitConfig) error {
+func createPrometheus(w *InitConfig) error {
 	var replicas int32
 	replicas = 1
 	cpu, _ := resource.ParseQuantity("50m")  //500m
@@ -192,7 +222,7 @@ func CreatePrometheus(w *InitConfig) error {
 	return nil
 }
 
-func CreatePrometheusRules(w *InitConfig) error {
+func createPrometheusRules(w *InitConfig) error {
 	promclientset, err := prometheus.NewForConfig(w.cfg)
 	if err != nil {
 		return err
@@ -274,7 +304,7 @@ func CreatePrometheusRules(w *InitConfig) error {
 	return nil
 }
 
-func CreateServiceMonitor(w *InitConfig) error {
+func createServiceMonitor(w *InitConfig) error {
 	promclientset, err := prometheus.NewForConfig(w.cfg)
 	if err != nil {
 		return err
@@ -314,11 +344,26 @@ func CreateServiceMonitor(w *InitConfig) error {
 	return nil
 }
 
-func CreateAlertManager(w *InitConfig) error {
+func createAlertManager(w *InitConfig) error {
 	var replicas int32
 	replicas = 1
 	cpu, _ := resource.ParseQuantity("10m")  //100m
 	mem, _ := resource.ParseQuantity("52Mi") //512m
+
+	file, err := os.Open(configDir + "/alertmanager.yaml")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	alertmgrSecret, err := ioutil.ReadAll(file)
+	if err != nil {
+		return err
+	}
+
+	err = createSecret(w, "alertmanager-sysalert", monitoringNS, "alertmanager.yaml", alertmgrSecret)
+	if err != nil {
+		return err
+	}
 
 	promclientset, err := prometheus.NewForConfig(w.cfg)
 	if err != nil {
@@ -379,7 +424,259 @@ func CreateAlertManager(w *InitConfig) error {
 	return nil
 }
 
-func CreateRBAC(w *InitConfig) error {
+func createGrafana(w *InitConfig) error {
+	// Create Secret for Grafana
+	file, err := os.Open(configDir + "/grafana-datasources")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	secretData, err := ioutil.ReadAll(file)
+	if err != nil {
+		return err
+	}
+
+	err = createSecret(w, "grafana-datasources", monitoringNS, "datasources.yaml", secretData)
+	if err != nil {
+		return err
+	}
+
+	// Create configmap for adding dashboard in Grafana
+	err = createConfigMap(w, "grafana-dashboards", monitoringNS, "dashboards.yaml", configDir+"/grafana-dashboards")
+	if err != nil {
+		return err
+	}
+
+	// Create configmap for adding prometheus dashboard definition in Grafana
+	err = createConfigMap(w, "grafana-dashboard-prometheus", monitoringNS, "prometheus.json", configDir+"/grafana-dashboard-prometheus")
+	if err != nil {
+		return err
+	}
+
+	// Create configmap for adding node-exporter dashboard definition in Grafana
+	err = createConfigMap(w, "grafana-dashboard-node-exporter", monitoringNS, "node-exporter.json", configDir+"/grafana-dashboard-node-exporter")
+	if err != nil {
+		return err
+	}
+
+	// Create configmap for adding nginx configs in Grafana
+	err = createConfigMap(w, "nginx-conf", monitoringNS, "nginx.conf", configDir+"/nginx-config")
+	if err != nil {
+		return err
+	}
+
+	// Create configmap for adding grafana configs
+	err = createConfigMap(w, "grafana-conf", monitoringNS, "grafana.ini", configDir+"/grafana-config")
+	if err != nil {
+		return err
+	}
+
+	// Create deployment for grafana
+	deploymentClient := w.client.AppsV1().Deployments(monitoringNS)
+	deployment := &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "grafana",
+			Namespace: monitoringNS,
+		},
+		Spec: appsv1.DeploymentSpec{
+			Replicas: int32Ptr(1),
+			Selector: &metav1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "grafana",
+				},
+			},
+			Template: apiv1.PodTemplateSpec{
+				ObjectMeta: metav1.ObjectMeta{
+					Labels: map[string]string{
+						"app": "grafana",
+					},
+				},
+				Spec: apiv1.PodSpec{
+					Containers: []apiv1.Container{
+						{
+							Name:  "proxy",
+							Image: "nginx",
+							Ports: []apiv1.ContainerPort{
+								{
+									ContainerPort: 80,
+								},
+							},
+							VolumeMounts: []apiv1.VolumeMount{
+								{
+									Name:      "nginx-conf",
+									MountPath: "/etc/nginx",
+									ReadOnly:  true,
+								},
+								{
+									Name:      "log",
+									MountPath: "/var/log/nginx",
+								},
+							},
+						},
+						{
+							Name:  "grafana",
+							Image: "grafana/grafana:6.3.2",
+							Ports: []apiv1.ContainerPort{
+								{
+									Name:          "http",
+									ContainerPort: 3000,
+								},
+							},
+							VolumeMounts: []apiv1.VolumeMount{
+								{
+									Name:      "grafana-conf",
+									MountPath: "/etc/grafana",
+									ReadOnly:  true,
+								},
+								{
+									Name:      "grafana-storage",
+									MountPath: "/var/lib/grafana",
+									ReadOnly:  false,
+								},
+								{
+									Name:      "grafana-datasources",
+									MountPath: "/etc/grafana/provisioning/datasources",
+									ReadOnly:  false,
+								},
+								{
+									Name:      "grafana-dashboards",
+									MountPath: "/etc/grafana/provisioning/dashboards",
+									ReadOnly:  false,
+								},
+								{
+									Name:      "grafana-dashboard-prometheus",
+									MountPath: "/grafana-dashboard-definitions/0/prometheus",
+									ReadOnly:  false,
+								},
+								{
+									Name:      "grafana-dashboard-node-exporter",
+									MountPath: "/grafana-dashboard-definitions/1/node-exporter",
+									ReadOnly:  false,
+								},
+							},
+						},
+					},
+					Volumes: []apiv1.Volume{
+						{
+							Name: "grafana-storage",
+							VolumeSource: apiv1.VolumeSource{
+								EmptyDir: &apiv1.EmptyDirVolumeSource{},
+							},
+						},
+						{
+							Name: "log",
+							VolumeSource: apiv1.VolumeSource{
+								EmptyDir: &apiv1.EmptyDirVolumeSource{},
+							},
+						},
+						{
+							Name: "grafana-datasources",
+							VolumeSource: apiv1.VolumeSource{
+								Secret: &apiv1.SecretVolumeSource{
+									SecretName: "grafana-datasources",
+								},
+							},
+						},
+						{
+							Name: "nginx-conf",
+							VolumeSource: apiv1.VolumeSource{
+								ConfigMap: &apiv1.ConfigMapVolumeSource{
+									LocalObjectReference: apiv1.LocalObjectReference{
+										Name: "nginx-conf",
+									},
+									Items: []apiv1.KeyToPath{
+										{
+											Key:  "nginx.conf",
+											Path: "nginx.conf",
+										},
+									},
+								},
+							},
+						},
+						{
+							Name: "grafana-conf",
+							VolumeSource: apiv1.VolumeSource{
+								ConfigMap: &apiv1.ConfigMapVolumeSource{
+									LocalObjectReference: apiv1.LocalObjectReference{
+										Name: "grafana-conf",
+									},
+									Items: []apiv1.KeyToPath{
+										{
+											Key:  "grafana.ini",
+											Path: "grafana.ini",
+										},
+									},
+								},
+							},
+						},
+						{
+							Name: "grafana-dashboards",
+							VolumeSource: apiv1.VolumeSource{
+								ConfigMap: &apiv1.ConfigMapVolumeSource{
+									LocalObjectReference: apiv1.LocalObjectReference{
+										Name: "grafana-dashboards",
+									},
+								},
+							},
+						},
+						{
+							Name: "grafana-dashboard-prometheus",
+							VolumeSource: apiv1.VolumeSource{
+								ConfigMap: &apiv1.ConfigMapVolumeSource{
+									LocalObjectReference: apiv1.LocalObjectReference{
+										Name: "grafana-dashboard-prometheus",
+									},
+								},
+							},
+						},
+						{
+							Name: "grafana-dashboard-node-exporter",
+							VolumeSource: apiv1.VolumeSource{
+								ConfigMap: &apiv1.ConfigMapVolumeSource{
+									LocalObjectReference: apiv1.LocalObjectReference{
+										Name: "grafana-dashboard-node-exporter",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+	_, err = deploymentClient.Create(deployment)
+	if err != nil {
+		return err
+	}
+
+	// Create service for grafana
+	serviceClient := w.client.CoreV1().Services(monitoringNS)
+	service := &apiv1.Service{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      "grafana-ui",
+			Namespace: monitoringNS,
+		},
+		Spec: apiv1.ServiceSpec{
+			Selector: map[string]string{
+				"app": "grafana",
+			},
+			Ports: []apiv1.ServicePort{
+				{
+					Port:     80,
+					Protocol: "TCP",
+				},
+			},
+		},
+	}
+	_, err = serviceClient.Create(service)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func createRBAC(w *InitConfig) error {
 	// Create Service Account for Prometheus
 	serviceAccountClient := w.client.CoreV1().ServiceAccounts(monitoringNS)
 	serviceAccount := &apiv1.ServiceAccount{
@@ -458,11 +755,47 @@ func CreateRBAC(w *InitConfig) error {
 	return nil
 }
 
-/*func CreateSecret(w *InitConfig) error {
-	secret := apiv1.Secret{
-		Type: "Opaque",
-
+func createSecret(w *InitConfig, name string, namespace string, key string, data []byte) error {
+	secretClient := w.client.CoreV1().Secrets(namespace)
+	secret := &apiv1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: map[string][]byte{
+			key: data,
+		},
 	}
-	//w.client.CoreV1().Secrets
-	//client.CoreV1().Secrets("").Create()
-}*/
+	_, err := secretClient.Create(secret)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func createConfigMap(w *InitConfig, name string, namespace string, param string, fileName string) error {
+	file, err := os.Open(fileName)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	configData, err := ioutil.ReadAll(file)
+
+	configMapClient := w.client.CoreV1().ConfigMaps(namespace)
+	configMap := &apiv1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+		},
+		Data: map[string]string{
+			param: string(configData),
+		},
+	}
+	_, err = configMapClient.Create(configMap)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func int32Ptr(i int32) *int32 { return &i }
