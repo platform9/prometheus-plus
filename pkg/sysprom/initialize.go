@@ -17,9 +17,11 @@ package sysprom
 */
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
+	"time"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	monitoringclient "github.com/coreos/prometheus-operator/pkg/client/versioned"
@@ -42,7 +44,7 @@ const (
 	prometheusPort   = 9090
 	alertmanagerPort = 9093
 	monitoringNS     = "pf9-monitoring"
-	configDir        = "/etc/pf9/config"
+	configDir        = "/etc/promplus/config"
 )
 
 // InitConfig stores configuration all system prometheus objects
@@ -50,6 +52,13 @@ type InitConfig struct {
 	cfg     *rest.Config
 	client  kubernetes.Interface
 	mClient monitoringclient.Interface
+}
+
+// resource stores kubernetes resources
+type Resource struct {
+	name      string
+	namespace string
+	kind      string
 }
 
 // New returns new instance of InitConfig
@@ -112,6 +121,9 @@ func SetupSystemPrometheus() error {
 	if err != nil {
 		log.Fatal(err, "when starting system prometheus controller")
 	}
+	if err := waitForResources(syspc); err != nil {
+		log.Fatal(err, "while waiting for appbert resources to come up")
+	}
 	if err := createRBAC(syspc); err != nil {
 		log.Fatal(err, "while setting up RBAC for prometheus")
 	}
@@ -134,7 +146,44 @@ func SetupSystemPrometheus() error {
 	return nil
 }
 
-//CreatePrometheus resource
+// waitForResouces waits for resources to get into running state
+func waitForResources(w *InitConfig) error {
+	var testResouces = []Resource{
+		{name: "kube-state-metrics", namespace: "pf9-monitoring", kind: "deployment"},
+		{name: "catalog-operator", namespace: "pf9-olm", kind: "deployment"},
+		{name: "olm-operator", namespace: "pf9-olm", kind: "deployment"},
+		{name: "packageserver", namespace: "pf9-olm", kind: "deployment"},
+		{name: "prometheus-operator", namespace: "pf9-operators", kind: "deployment"},
+		{name: "node-exporter", namespace: "pf9-monitoring", kind: "daemonset"},
+	}
+
+	// Set timeout value for wait
+	timeout := time.After(10 * time.Minute)
+	tick := time.Tick(10 * time.Second)
+
+	for _, r := range testResouces {
+	Loop:
+		for {
+			status := false
+			select {
+			case <-timeout:
+				return fmt.Errorf("appbert resources are not ready")
+			case <-tick:
+				if r.kind == "deployment" {
+					status, _ = checkDeploymentReady(w, r.name, r.namespace)
+				} else if r.kind == "daemonset" {
+					status, _ = checkDaemonSetReady(w, r.name, r.namespace)
+				}
+				if status == true {
+					break Loop
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// CreatePrometheus resource
 func createPrometheus(w *InitConfig) error {
 	var replicas int32
 	replicas = 1
@@ -425,6 +474,11 @@ func createAlertManager(w *InitConfig) error {
 }
 
 func createGrafana(w *InitConfig) error {
+	var replicas int32
+	replicas = 1
+	cpu, _ := resource.ParseQuantity("100m")
+	mem, _ := resource.ParseQuantity("100Mi")
+
 	// Create Secret for Grafana
 	file, err := os.Open(configDir + "/grafana-datasources")
 	if err != nil {
@@ -479,7 +533,7 @@ func createGrafana(w *InitConfig) error {
 			Namespace: monitoringNS,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(1),
+			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": "grafana",
@@ -520,6 +574,20 @@ func createGrafana(w *InitConfig) error {
 								{
 									Name:          "http",
 									ContainerPort: 3000,
+								},
+							},
+							ReadinessProbe: &apiv1.Probe{
+								Handler: apiv1.Handler{
+									HTTPGet: &apiv1.HTTPGetAction{
+										Path: "/api/health",
+										Port: intstr.IntOrString(intstr.FromString("http")),
+									},
+								},
+							},
+							Resources: apiv1.ResourceRequirements{
+								Requests: map[apiv1.ResourceName]resource.Quantity{
+									"cpu":    cpu,
+									"memory": mem,
 								},
 							},
 							VolumeMounts: []apiv1.VolumeMount{

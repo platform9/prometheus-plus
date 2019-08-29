@@ -51,8 +51,6 @@ func Main() int {
 		if err := sysprom.SetupSystemPrometheus(); err != nil {
 			log.Fatal(err, "while deploying system prometheus")
 		}
-
-		return 0
 	}
 
 	pc, err := prometheus.New()
