@@ -41,8 +41,8 @@ import (
 const (
 	prometheusPort   = 9090
 	alertmanagerPort = 9093
-	monitoringNS     = "pf9-monitoring"
-	configDir        = "/etc/pf9/config"
+	monitoringNS     = "pf9-operators"
+	configDir        = "/etc/promplus"
 )
 
 // InitConfig stores configuration all system prometheus objects
@@ -86,8 +86,10 @@ func buildInitConfig(cfg *rest.Config) (*InitConfig, error) {
 func getInCluster() (*InitConfig, error) {
 	cfg, err := rest.InClusterConfig()
 	if err != nil {
+		log.Error("Failed to create a in cluster kube config")
 		return nil, err
 	}
+	log.Info("Created an in cluster kube config")
 	return buildInitConfig(cfg)
 }
 
@@ -112,9 +114,9 @@ func SetupSystemPrometheus() error {
 	if err != nil {
 		log.Fatal(err, "when starting system prometheus controller")
 	}
-	if err := createRBAC(syspc); err != nil {
+	/*if err := createRBAC(syspc); err != nil {
 		log.Fatal(err, "while setting up RBAC for prometheus")
-	}
+	}*/
 	if err := createPrometheus(syspc); err != nil {
 		log.Fatal(err, "while creating prometheus instance")
 	}
@@ -686,6 +688,7 @@ func createRBAC(w *InitConfig) error {
 	}
 	_, err := serviceAccountClient.Create(serviceAccount)
 	if err != nil {
+		log.Error("Failed to create service account: ", err)
 		return err
 	}
 

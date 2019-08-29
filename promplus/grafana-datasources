@@ -7,7 +7,7 @@
             "name": "prometheus",
             "orgId": 1,
             "type": "prometheus",
-            "url": "http://prometheus.pf9-monitoring.svc:9090",
+            "url": "http://prometheus.pf9-operators.svc:9090",
             "version": 1
         }
     ]
