@@ -119,28 +119,28 @@ func getByKubeCfg() (*InitConfig, error) {
 func SetupSystemPrometheus() error {
 	syspc, err := new()
 	if err != nil {
-		log.Fatal(err, "when starting system prometheus controller")
+		log.Error(err, "when starting system prometheus controller")
 	}
 	if err := waitForResources(syspc); err != nil {
-		log.Fatal(err, "while waiting for appbert resources to come up")
+		log.Error(err, "while waiting for appbert resources to come up")
 	}
 	if err := createRBAC(syspc); err != nil {
-		log.Fatal(err, "while setting up RBAC for prometheus")
+		log.Error(err, "while setting up RBAC for prometheus")
 	}
 	if err := createPrometheus(syspc); err != nil {
-		log.Fatal(err, "while creating prometheus instance")
+		log.Error(err, "while creating prometheus instance")
 	}
 	if err := createPrometheusRules(syspc); err != nil {
-		log.Fatal(err, "while creating prometheus rules")
+		log.Error(err, "while creating prometheus rules")
 	}
 	if err := createServiceMonitor(syspc); err != nil {
-		log.Fatal(err, "while creating service-monitor instance")
+		log.Error(err, "while creating service-monitor instance")
 	}
 	if err := createAlertManager(syspc); err != nil {
-		log.Fatal(err, "while creating alert-manager instance")
+		log.Error(err, "while creating alert-manager instance")
 	}
 	if err := createGrafana(syspc); err != nil {
-		log.Fatal(err, "while creating grafana instance")
+		log.Error(err, "while creating grafana instance")
 	}
 
 	return nil
@@ -237,8 +237,7 @@ func createPrometheus(w *InitConfig) error {
 	}
 	_, err = prometheusClient.Create(promObject)
 	if err != nil {
-		log.Fatal("Failed to create prometheus object", err)
-		return err
+		return fmt.Errorf("Failed to create prometheus object. Error: %v", err.Error())
 	}
 
 	// Creating service for sample application
@@ -346,8 +345,7 @@ func createPrometheusRules(w *InitConfig) error {
 
 	_, err = prometheusClient.Create(promObject)
 	if err != nil {
-		log.Fatal("Failed to create prometheus rule", err)
-		return err
+		return fmt.Errorf("Failed to create prometheus rule object. Error: %v", err.Error())
 	}
 
 	return nil
@@ -386,8 +384,7 @@ func createServiceMonitor(w *InitConfig) error {
 
 	_, err = svcMonClient.Create(svcMonObject)
 	if err != nil {
-		log.Fatal("Failed to create service monitor", err)
-		return err
+		return fmt.Errorf("Failed to create service-monitor object. Error: %v", err.Error())
 	}
 
 	return nil
@@ -439,8 +436,7 @@ func createAlertManager(w *InitConfig) error {
 	}
 	_, err = alertMgrClient.Create(alertMgrObject)
 	if err != nil {
-		log.Fatal("Failed to create alert manager object", err)
-		return err
+		return fmt.Errorf("Failed to create alert-manager object. Error: %v", err.Error())
 	}
 
 	// Creating service for alert manager
