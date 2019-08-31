@@ -17,9 +17,11 @@ package sysprom
 */
 
 import (
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path"
+	"time"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	monitoringclient "github.com/coreos/prometheus-operator/pkg/client/versioned"
@@ -29,7 +31,6 @@ import (
 	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
-	rbac "k8s.io/api/rbac/v1beta1"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -50,6 +51,13 @@ type InitConfig struct {
 	cfg     *rest.Config
 	client  kubernetes.Interface
 	mClient monitoringclient.Interface
+}
+
+// resource stores kubernetes resources
+type Resource struct {
+	name      string
+	namespace string
+	kind      string
 }
 
 // New returns new instance of InitConfig
@@ -112,36 +120,73 @@ func getByKubeCfg() (*InitConfig, error) {
 func SetupSystemPrometheus() error {
 	syspc, err := new()
 	if err != nil {
-		log.Fatal(err, "when starting system prometheus controller")
+		log.Error(err, "when starting system prometheus controller")
 	}
-	/*if err := createRBAC(syspc); err != nil {
-		log.Fatal(err, "while setting up RBAC for prometheus")
-	}*/
+	if err := waitForResources(syspc); err != nil {
+		log.Error(err, "while waiting for appbert resources to come up")
+	}
 	if err := createPrometheus(syspc); err != nil {
-		log.Fatal(err, "while creating prometheus instance")
+		log.Error(err, "while creating prometheus instance")
 	}
 	if err := createPrometheusRules(syspc); err != nil {
-		log.Fatal(err, "while creating prometheus rules")
+		log.Error(err, "while creating prometheus rules")
 	}
 	if err := createServiceMonitor(syspc); err != nil {
-		log.Fatal(err, "while creating service-monitor instance")
+		log.Error(err, "while creating service-monitor instance")
 	}
 	if err := createAlertManager(syspc); err != nil {
-		log.Fatal(err, "while creating alert-manager instance")
+		log.Error(err, "while creating alert-manager instance")
 	}
 	if err := createGrafana(syspc); err != nil {
-		log.Fatal(err, "while creating grafana instance")
+		log.Error(err, "while creating grafana instance")
 	}
 
 	return nil
 }
 
-//CreatePrometheus resource
+// waitForResouces waits for resources to get into running state
+func waitForResources(w *InitConfig) error {
+	var testResouces = []Resource{
+		{name: "kube-state-metrics", namespace: "pf9-monitoring", kind: "deployment"},
+		{name: "catalog-operator", namespace: "pf9-olm", kind: "deployment"},
+		{name: "olm-operator", namespace: "pf9-olm", kind: "deployment"},
+		{name: "packageserver", namespace: "pf9-olm", kind: "deployment"},
+		{name: "prometheus-operator", namespace: "pf9-operators", kind: "deployment"},
+		{name: "node-exporter", namespace: "pf9-monitoring", kind: "daemonset"},
+	}
+
+	// Set timeout value for wait
+	timeout := time.After(10 * time.Minute)
+	tick := time.Tick(10 * time.Second)
+
+	for _, r := range testResouces {
+	Loop:
+		for {
+			status := false
+			select {
+			case <-timeout:
+				return fmt.Errorf("appbert resources are not ready")
+			case <-tick:
+				if r.kind == "deployment" {
+					status, _ = checkDeploymentReady(w, r.name, r.namespace)
+				} else if r.kind == "daemonset" {
+					status, _ = checkDaemonSetReady(w, r.name, r.namespace)
+				}
+				if status == true {
+					break Loop
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// CreatePrometheus resource
 func createPrometheus(w *InitConfig) error {
 	var replicas int32
 	replicas = 1
-	cpu, _ := resource.ParseQuantity("50m")  //500m
-	mem, _ := resource.ParseQuantity("52Mi") //512Mi
+	cpu, _ := resource.ParseQuantity("500m")
+	mem, _ := resource.ParseQuantity("512Mi")
 
 	promclientset, err := prometheus.NewForConfig(w.cfg)
 	if err != nil {
@@ -162,7 +207,7 @@ func createPrometheus(w *InitConfig) error {
 					"role":       "service-monitor",
 				},
 			},
-			ServiceAccountName: "prometheus",
+			ServiceAccountName: "prometheus-operator-0-23-2",
 			Replicas:           &replicas,
 			Retention:          "15d",
 			RuleSelector: &metav1.LabelSelector{
@@ -190,8 +235,7 @@ func createPrometheus(w *InitConfig) error {
 	}
 	_, err = prometheusClient.Create(promObject)
 	if err != nil {
-		log.Fatal("Failed to create prometheus object", err)
-		return err
+		return fmt.Errorf("Failed to create prometheus object. Error: %v", err.Error())
 	}
 
 	// Creating service for sample application
@@ -299,8 +343,7 @@ func createPrometheusRules(w *InitConfig) error {
 
 	_, err = prometheusClient.Create(promObject)
 	if err != nil {
-		log.Fatal("Failed to create prometheus rule", err)
-		return err
+		return fmt.Errorf("Failed to create prometheus rule object. Error: %v", err.Error())
 	}
 
 	return nil
@@ -334,13 +377,17 @@ func createServiceMonitor(w *InitConfig) error {
 					"app": "node-exporter",
 				},
 			},
+			NamespaceSelector: monitoringv1.NamespaceSelector{
+				MatchNames: []string{
+					"pf9-monitoring",
+				},
+			},
 		},
 	}
 
 	_, err = svcMonClient.Create(svcMonObject)
 	if err != nil {
-		log.Fatal("Failed to create service monitor", err)
-		return err
+		return fmt.Errorf("Failed to create service-monitor object. Error: %v", err.Error())
 	}
 
 	return nil
@@ -392,8 +439,7 @@ func createAlertManager(w *InitConfig) error {
 	}
 	_, err = alertMgrClient.Create(alertMgrObject)
 	if err != nil {
-		log.Fatal("Failed to create alert manager object", err)
-		return err
+		return fmt.Errorf("Failed to create alert-manager object. Error: %v", err.Error())
 	}
 
 	// Creating service for alert manager
@@ -427,6 +473,11 @@ func createAlertManager(w *InitConfig) error {
 }
 
 func createGrafana(w *InitConfig) error {
+	var replicas int32
+	replicas = 1
+	cpu, _ := resource.ParseQuantity("100m")
+	mem, _ := resource.ParseQuantity("100Mi")
+
 	// Create Secret for Grafana
 	file, err := os.Open(configDir + "/grafana-datasources")
 	if err != nil {
@@ -481,7 +532,7 @@ func createGrafana(w *InitConfig) error {
 			Namespace: monitoringNS,
 		},
 		Spec: appsv1.DeploymentSpec{
-			Replicas: int32Ptr(1),
+			Replicas: &replicas,
 			Selector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"app": "grafana",
@@ -522,6 +573,20 @@ func createGrafana(w *InitConfig) error {
 								{
 									Name:          "http",
 									ContainerPort: 3000,
+								},
+							},
+							ReadinessProbe: &apiv1.Probe{
+								Handler: apiv1.Handler{
+									HTTPGet: &apiv1.HTTPGetAction{
+										Path: "/api/health",
+										Port: intstr.IntOrString(intstr.FromString("http")),
+									},
+								},
+							},
+							Resources: apiv1.ResourceRequirements{
+								Requests: map[apiv1.ResourceName]resource.Quantity{
+									"cpu":    cpu,
+									"memory": mem,
 								},
 							},
 							VolumeMounts: []apiv1.VolumeMount{
@@ -671,86 +736,6 @@ func createGrafana(w *InitConfig) error {
 		},
 	}
 	_, err = serviceClient.Create(service)
-	if err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func createRBAC(w *InitConfig) error {
-	// Create Service Account for Prometheus
-	serviceAccountClient := w.client.CoreV1().ServiceAccounts(monitoringNS)
-	serviceAccount := &apiv1.ServiceAccount{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "prometheus",
-		},
-	}
-	_, err := serviceAccountClient.Create(serviceAccount)
-	if err != nil {
-		log.Error("Failed to create service account: ", err)
-		return err
-	}
-
-	// Create Cluster Role for Prometheus
-	clusterRoleClient := w.client.RbacV1beta1().ClusterRoles()
-	clusterRole := &rbac.ClusterRole{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "prometheus",
-		},
-		Rules: []rbac.PolicyRule{
-			{
-				APIGroups: []string{
-					"",
-				},
-				Resources: []string{
-					"nodes",
-					"services",
-					"endpoints",
-					"pods",
-					"configmaps",
-				},
-				Verbs: []string{
-					"get",
-					"list",
-					"watch",
-				},
-			},
-			{
-				NonResourceURLs: []string{
-					"/metrics",
-				},
-				Verbs: []string{
-					"get",
-				},
-			},
-		},
-	}
-	_, err = clusterRoleClient.Create(clusterRole)
-	if err != nil {
-		return err
-	}
-
-	// Create Cluster Role Binding for Prometheus
-	clusterRoleBindingClient := w.client.RbacV1beta1().ClusterRoleBindings()
-	clusterRoleBinding := &rbac.ClusterRoleBinding{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: "prometheus",
-		},
-		RoleRef: rbac.RoleRef{
-			APIGroup: "rbac.authorization.k8s.io",
-			Kind:     "ClusterRole",
-			Name:     "prometheus",
-		},
-		Subjects: []rbac.Subject{
-			{
-				Kind:      "ServiceAccount",
-				Name:      "prometheus",
-				Namespace: monitoringNS,
-			},
-		},
-	}
-	_, err = clusterRoleBindingClient.Create(clusterRoleBinding)
 	if err != nil {
 		return err
 	}

@@ -22,7 +22,6 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
-	"time"
 
 	prometheus "github.com/platform9/prometheus-plus/pkg/prometheus"
 	"github.com/platform9/prometheus-plus/pkg/sysprom"
@@ -49,8 +48,6 @@ func Main() int {
 	init := viper.GetBool("initmode")
 	if init == true {
 		log.Info("Starting in Init mode")
-		time.Sleep(90 * time.Second)
-		log.Info("Installing system prometheus")
 
 		if err := sysprom.SetupSystemPrometheus(); err != nil {
 			log.Fatal(err, "while deploying system prometheus")
