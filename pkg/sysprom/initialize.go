@@ -31,6 +31,7 @@ import (
 	"github.com/spf13/viper"
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
+	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/intstr"
@@ -48,16 +49,10 @@ const (
 
 // InitConfig stores configuration all system prometheus objects
 type InitConfig struct {
-	cfg     *rest.Config
-	client  kubernetes.Interface
-	mClient monitoringclient.Interface
-}
-
-// resource stores kubernetes resources
-type Resource struct {
-	name      string
-	namespace string
-	kind      string
+	cfg       *rest.Config
+	client    kubernetes.Interface
+	mClient   monitoringclient.Interface
+	crdclient clientset.Interface
 }
 
 // New returns new instance of InitConfig
@@ -84,10 +79,16 @@ func buildInitConfig(cfg *rest.Config) (*InitConfig, error) {
 		return nil, errors.Wrap(err, "instantiating monitoring client")
 	}
 
+	crdclient, err := clientset.NewForConfig(cfg)
+	if err != nil {
+		return nil, fmt.Errorf("%s instantiating clientset client", err.Error())
+	}
+
 	return &InitConfig{
-		cfg:     cfg,
-		client:  client,
-		mClient: mclient,
+		cfg:       cfg,
+		client:    client,
+		mClient:   mclient,
+		crdclient: crdclient,
 	}, nil
 }
 
@@ -122,8 +123,8 @@ func SetupSystemPrometheus() error {
 	if err != nil {
 		log.Error(err, "when starting system prometheus controller")
 	}
-	if err := waitForResources(syspc); err != nil {
-		log.Error(err, "while waiting for appbert resources to come up")
+	if err := waitForCRD(syspc); err != nil {
+		log.Error(err, "while waiting for CRD's to come up")
 	}
 	if err := createPrometheus(syspc); err != nil {
 		log.Error(err, "while creating prometheus instance")
@@ -144,36 +145,36 @@ func SetupSystemPrometheus() error {
 	return nil
 }
 
-// waitForResouces waits for resources to get into running state
-func waitForResources(w *InitConfig) error {
-	var testResouces = []Resource{
-		{name: "kube-state-metrics", namespace: "pf9-monitoring", kind: "deployment"},
-		{name: "catalog-operator", namespace: "pf9-olm", kind: "deployment"},
-		{name: "olm-operator", namespace: "pf9-olm", kind: "deployment"},
-		{name: "packageserver", namespace: "pf9-olm", kind: "deployment"},
-		{name: "prometheus-operator", namespace: "pf9-operators", kind: "deployment"},
-		{name: "node-exporter", namespace: "pf9-monitoring", kind: "daemonset"},
+// waitForCRD waits for CRD's to be created
+func waitForCRD(w *InitConfig) error {
+	var crds = []string{
+		"prometheuses.monitoring.coreos.com",
+		"prometheusrules.monitoring.coreos.com",
+		"servicemonitors.monitoring.coreos.com",
+		"alertmanagers.monitoring.coreos.com",
 	}
 
 	// Set timeout value for wait
 	timeout := time.After(10 * time.Minute)
 	tick := time.Tick(10 * time.Second)
 
-	for _, r := range testResouces {
+	for _, value := range crds {
 	Loop:
 		for {
-			status := false
 			select {
 			case <-timeout:
-				return fmt.Errorf("appbert resources are not ready")
+				return fmt.Errorf("CRD's not created")
 			case <-tick:
-				if r.kind == "deployment" {
-					status, _ = checkDeploymentReady(w, r.name, r.namespace)
-				} else if r.kind == "daemonset" {
-					status, _ = checkDaemonSetReady(w, r.name, r.namespace)
+				list, err := w.crdclient.ApiextensionsV1beta1().CustomResourceDefinitions().List(metav1.ListOptions{})
+				if err != nil {
+					log.Error("Failed to get list of CRDs")
+					return err
 				}
-				if status == true {
-					break Loop
+				log.Infof("Checking for CRD: %s", value)
+				for _, d := range list.Items {
+					if d.Name == value {
+						break Loop
+					}
 				}
 			}
 		}
