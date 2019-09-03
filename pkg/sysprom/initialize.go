@@ -21,6 +21,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"strconv"
 	"time"
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
@@ -155,7 +156,12 @@ func waitForCRD(w *InitConfig) error {
 	}
 
 	// Set timeout value for wait
-	timeout := time.After(10 * time.Minute)
+	var waitPeriodValue int = 10
+	waitPeriod, exists := os.LookupEnv("CRD_WAIT_TIME")
+	if exists {
+		waitPeriodValue, _ = strconv.Atoi(waitPeriod)
+	}
+	timeout := time.After(time.Duration(waitPeriodValue) * time.Minute)
 	tick := time.Tick(10 * time.Second)
 
 	for _, value := range crds {
@@ -170,7 +176,6 @@ func waitForCRD(w *InitConfig) error {
 					log.Error("Failed to get list of CRDs")
 					return err
 				}
-				log.Infof("Checking for CRD: %s", value)
 				for _, d := range list.Items {
 					if d.Name == value {
 						break Loop
@@ -186,8 +191,17 @@ func waitForCRD(w *InitConfig) error {
 func createPrometheus(w *InitConfig) error {
 	var replicas int32
 	replicas = 1
-	cpu, _ := resource.ParseQuantity("500m")
-	mem, _ := resource.ParseQuantity("512Mi")
+	cpuResource, exists := os.LookupEnv("PROMETHEUS_CPU_RESOURCE")
+	if !exists {
+		cpuResource = "500m"
+	}
+	cpu, _ := resource.ParseQuantity(cpuResource)
+
+	memResource, exists := os.LookupEnv("PROMETHEUS_MEM_RESOURCE")
+	if !exists {
+		memResource = "512Mi"
+	}
+	mem, _ := resource.ParseQuantity(memResource)
 
 	promclientset, err := prometheus.NewForConfig(w.cfg)
 	if err != nil {
@@ -397,8 +411,17 @@ func createServiceMonitor(w *InitConfig) error {
 func createAlertManager(w *InitConfig) error {
 	var replicas int32
 	replicas = 1
-	cpu, _ := resource.ParseQuantity("10m")  //100m
-	mem, _ := resource.ParseQuantity("52Mi") //512m
+	cpuResource, exists := os.LookupEnv("ALERTMANAGER_CPU_RESOURCE")
+	if !exists {
+		cpuResource = "10m"
+	}
+	cpu, _ := resource.ParseQuantity(cpuResource)
+
+	memResource, exists := os.LookupEnv("ALERTMANAGER_MEM_RESOURCE")
+	if !exists {
+		memResource = "52Mi"
+	}
+	mem, _ := resource.ParseQuantity(memResource)
 
 	file, err := os.Open(configDir + "/alertmanager.yaml")
 	if err != nil {
@@ -476,8 +499,17 @@ func createAlertManager(w *InitConfig) error {
 func createGrafana(w *InitConfig) error {
 	var replicas int32
 	replicas = 1
-	cpu, _ := resource.ParseQuantity("100m")
-	mem, _ := resource.ParseQuantity("100Mi")
+	cpuResource, exists := os.LookupEnv("GRAFANA_CPU_RESOURCE")
+	if !exists {
+		cpuResource = "100m"
+	}
+	cpu, _ := resource.ParseQuantity(cpuResource)
+
+	memResource, exists := os.LookupEnv("GRAFANA_MEM_RESOURCE")
+	if !exists {
+		memResource = "100Mi"
+	}
+	mem, _ := resource.ParseQuantity(memResource)
 
 	// Create Secret for Grafana
 	file, err := os.Open(configDir + "/grafana-datasources")
