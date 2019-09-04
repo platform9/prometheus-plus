@@ -1,0 +1,77 @@
+[server]
+# Protocol (http, https, socket)
+protocol = http
+
+# The ip address to bind to, empty will bind to all interfaces
+http_addr =
+
+# The http port  to use
+http_port = 3000
+
+# The public facing domain name used to access grafana from a browser
+domain = localhost
+
+# Redirect to correct domain if host header does not match domain
+# Prevents DNS rebinding attacks
+enforce_domain = false
+
+# The full public facing url
+root_url = %(protocol)s://%(domain)s:%(http_port)s
+
+[users]
+# disable user signup / registration
+allow_sign_up = false
+
+# Allow non admin users to create organizations
+allow_org_create = false
+
+# Set to true to automatically assign new users to the default organization (id 1)
+auto_assign_org = true
+
+# Set this value to automatically add new users to the provided organization (if auto_assign_org above is set to true)
+auto_assign_org_id = 1
+
+# Default role new users will be automatically assigned (if auto_assign_org above is set to true)
+auto_assign_org_role = Viewer
+
+#################################### Anonymous Auth ######################
+[auth.anonymous]
+# enable anonymous access
+enabled = false
+
+# specify organization name that should be used for unauthenticated users
+org_name = Main Org.
+
+# specify role for unauthenticated users
+org_role = Viewer
+
+#################################### Session #############################
+[session]
+# Either "memory", "file", "redis", "mysql", "postgres", "memcache", default is "file"
+provider = file
+
+# Provider config options
+# memory: not have any config yet
+# file: session dir path, is relative to grafana data_path
+# redis: config like redis server e.g. `addr=127.0.0.1:6379,pool_size=100,db=grafana`
+# postgres: user=a password=b host=localhost port=5432 dbname=c sslmode=disable
+# mysql: go-sql-driver/mysql dsn config string, examples:
+#         `user:password@tcp(127.0.0.1:3306)/database_name`
+#         `user:password@unix(/var/run/mysqld/mysqld.sock)/database_name`
+# memcache: 127.0.0.1:11211
+
+
+provider_config = sessions
+
+# Session cookie name
+cookie_name = grafana_sess
+
+# If you use session in https only, default is false
+cookie_secure = false
+
+# Session life time, default is 86400
+session_life_time = 86400
+gc_interval_time = 86400
+
+# Connection Max Lifetime default is 14400 (means 14400 seconds or 4 hours)
+conn_max_lifetime = 14400

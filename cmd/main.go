@@ -24,6 +24,7 @@ import (
 	"syscall"
 
 	prometheus "github.com/platform9/prometheus-plus/pkg/prometheus"
+	"github.com/platform9/prometheus-plus/pkg/sysprom"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -32,15 +33,28 @@ import (
 
 var mode string
 var logLevel string
+var initMode bool
 
 const (
 	defaultMode     = "standalone"
 	defaultLogLevel = "INFO"
+	defaultInitMode = false
 )
 
 // Main is the entry point of helper controller
 func Main() int {
 	log.SetFormatter(&log.JSONFormatter{})
+
+	init := viper.GetBool("initmode")
+	if init == true {
+		log.Info("Starting in Init mode")
+
+		if err := sysprom.SetupSystemPrometheus(); err != nil {
+			log.Fatal(err, "while deploying system prometheus")
+		}
+
+		log.Info("Successfully installed system prometheus")
+	}
 
 	pc, err := prometheus.New()
 	if err != nil {
@@ -87,6 +101,9 @@ func buildCmd() *cobra.Command {
 	viper.BindPFlag("mode", pf.Lookup("mode"))
 	pf.StringVar(&logLevel, "log-level", defaultLogLevel, "Log level: DEBUG, INFO, WARN or FATAL")
 	viper.BindPFlag("log-level", pf.Lookup("log-level"))
+	pf.BoolVar(&initMode, "initmode", defaultInitMode, "Initialization mode: true or false")
+	viper.BindPFlag("initmode", pf.Lookup("initmode"))
+
 	return rootCmd
 }
 
