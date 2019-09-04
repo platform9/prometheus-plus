@@ -413,13 +413,13 @@ func createAlertManager(w *InitConfig) error {
 	replicas = 1
 	cpuResource, exists := os.LookupEnv("ALERTMANAGER_CPU_RESOURCE")
 	if !exists {
-		cpuResource = "10m"
+		cpuResource = "100m"
 	}
 	cpu, _ := resource.ParseQuantity(cpuResource)
 
 	memResource, exists := os.LookupEnv("ALERTMANAGER_MEM_RESOURCE")
 	if !exists {
-		memResource = "52Mi"
+		memResource = "512Mi"
 	}
 	mem, _ := resource.ParseQuantity(memResource)
 

@@ -8,6 +8,3 @@ route:
   receiver: 'webhook'
 receivers:
 - name: 'webhook'
-  slack_configs:
-  - api_url: 'https://hooks.slack.com/services/T02ST3/BMEF5K/7DFQwU'
-    channel: '#alertmgr'
