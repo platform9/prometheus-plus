@@ -157,7 +157,7 @@ func waitForCRD(w *InitConfig) error {
 
 	// Set timeout value for wait
 	var waitPeriodValue int = 10
-	waitPeriod, exists := os.LookupEnv("CRD_WAIT_TIME")
+	waitPeriod, exists := os.LookupEnv("CRD_WAIT_TIME_MIN")
 	if exists {
 		waitPeriodValue, _ = strconv.Atoi(waitPeriod)
 	}
