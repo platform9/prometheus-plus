@@ -45,7 +45,7 @@ const (
 	prometheusPort   = 9090
 	alertmanagerPort = 9093
 	monitoringNS     = "pf9-operators"
-	configDir        = "promplus"
+	configDir        = "/etc/promplus"
 )
 
 // InitConfig stores configuration all system prometheus objects
