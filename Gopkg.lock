@@ -669,6 +669,20 @@
   revision = "97d6bb8ea5f4f05566a0124638fb511be2b80c54"
 
 [[projects]]
+  digest = "1:720f17872db890bede54ef50268f5b0a0c21eb8e3d4413e0e2b060103966476a"
+  name = "k8s.io/apiextensions-apiserver"
+  packages = [
+    "pkg/apis/apiextensions",
+    "pkg/apis/apiextensions/v1beta1",
+    "pkg/client/clientset/clientset",
+    "pkg/client/clientset/clientset/scheme",
+    "pkg/client/clientset/clientset/typed/apiextensions/v1beta1",
+  ]
+  pruneopts = "UT"
+  revision = "0dbe462fe92dfa8b56cc9facf0658a17d0c70fc5"
+  version = "kubernetes-1.15.3"
+
+[[projects]]
   branch = "master"
   digest = "1:91c80904ad76b646b9921ae808326fa088f6dc6c9e7d2a2b11577c65bb70473e"
   name = "k8s.io/apimachinery"
@@ -813,11 +827,12 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:14e8a3b53e6d8cb5f44783056b71bb2ca1ac7e333939cc97f3e50b579c920845"
+  digest = "1:ee6063c66a2b3be97487a8df6f359cd5f38b3a0d1fc2442b49f214f24622d321"
   name = "k8s.io/utils"
   packages = [
     "buffer",
     "integer",
+    "pointer",
     "trace",
   ]
   pruneopts = "UT"
@@ -837,13 +852,18 @@
   input-imports = [
     "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1",
     "github.com/coreos/prometheus-operator/pkg/client/versioned",
+    "github.com/coreos/prometheus-operator/pkg/client/versioned/typed/monitoring/v1",
     "github.com/pkg/errors",
     "github.com/sirupsen/logrus",
     "github.com/spf13/cobra",
     "github.com/spf13/viper",
     "golang.org/x/sync/errgroup",
+    "k8s.io/api/apps/v1",
     "k8s.io/api/core/v1",
+    "k8s.io/api/rbac/v1beta1",
+    "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset",
     "k8s.io/apimachinery/pkg/api/errors",
+    "k8s.io/apimachinery/pkg/api/resource",
     "k8s.io/apimachinery/pkg/apis/meta/v1",
     "k8s.io/apimachinery/pkg/runtime",
     "k8s.io/apimachinery/pkg/util/intstr",
