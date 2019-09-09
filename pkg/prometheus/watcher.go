@@ -18,14 +18,14 @@ package prometheus
 
 import (
 	"fmt"
+	"io/ioutil"
 	"os"
 	"path"
 	"time"
 
-	"k8s.io/client-go/rest"
-
 	"github.com/platform9/prometheus-plus/pkg/util"
 	"github.com/spf13/viper"
+	"k8s.io/client-go/rest"
 
 	"k8s.io/apimachinery/pkg/util/intstr"
 
@@ -51,6 +51,8 @@ const (
 	prometheusPort   = 9090
 	alertmanagerPort = 9093
 	suffixLen        = 8
+	configDir        = "/etc/promplus"
+	monitoringNS     = "pf9-operators"
 )
 
 // Watcher watches for changes in Prometheus and AlertManager objects
@@ -59,8 +61,10 @@ type Watcher struct {
 	mClient   monitoringclient.Interface
 	promInf   cache.SharedIndexInformer
 	amInf     cache.SharedIndexInformer
+	amcInf    cache.SharedIndexInformer
 	promQueue workqueue.RateLimitingInterface
 	amQueue   workqueue.RateLimitingInterface
+	amcQueue  workqueue.RateLimitingInterface
 }
 
 // New returns new instance of watcher
@@ -115,13 +119,29 @@ func buildWatcher(cfg *rest.Config) (*Watcher, error) {
 		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
 	)
 
+	amcInf := cache.NewSharedIndexInformer(
+		&cache.ListWatch{
+			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+				return mclient.MonitoringV1().AlertmanagerConfigs(metav1.NamespaceAll).List(options)
+			},
+			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+				return mclient.MonitoringV1().AlertmanagerConfigs(metav1.NamespaceAll).Watch(options)
+			},
+		},
+		&monitoringv1.AlertmanagerConfig{},
+		resyncPeriod,
+		cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc},
+	)
+
 	return &Watcher{
 		client:    client,
 		mClient:   mclient,
 		promInf:   promInf,
 		amInf:     amInf,
+		amcInf:    amcInf,
 		promQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "prometheus"),
 		amQueue:   workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "alertmanager"),
+		amcQueue:  workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "alertmanagerconfig"),
 	}, nil
 }
 
@@ -175,14 +195,17 @@ func enqueue(queue workqueue.RateLimitingInterface, obj interface{}) {
 
 // Run starts sync workers
 func (w *Watcher) Run(stopc <-chan struct{}) error {
+	log.Info("In prom run")
 	defer w.promQueue.ShutDown()
 	defer w.amQueue.ShutDown()
 
 	go worker(w.promQueue, w.syncPrometheus)
 	go worker(w.amQueue, w.syncAlertManager)
+	go worker(w.amcQueue, w.syncAlertManagerConfig)
 
 	go w.promInf.Run(stopc)
 	go w.amInf.Run(stopc)
+	go w.amcInf.Run(stopc)
 
 	if err := w.waitForCacheSync(stopc); err != nil {
 		return err
@@ -204,6 +227,7 @@ func (w *Watcher) waitForCacheSync(stopc <-chan struct{}) error {
 	}{
 		{"Prometheus", w.promInf},
 		{"Alertmanager", w.amInf},
+		{"AlertmanagerConfig", w.amcInf},
 	}
 
 	for _, inf := range informers {
@@ -228,12 +252,13 @@ func worker(queue workqueue.RateLimitingInterface, syncFn func(string) error) {
 
 func processNext(queue workqueue.RateLimitingInterface, syncFn func(string) error) bool {
 	key, quit := queue.Get()
+	log.Debugf("Processing key in processnext: %s", key)
 	if quit {
 		return false
 	}
 
 	defer queue.Done(key)
-
+	log.Debug("Calling sync function")
 	err := syncFn(key.(string))
 	if err == nil {
 		queue.Forget(key)
@@ -254,6 +279,11 @@ func (w *Watcher) addHandlers() {
 	w.amInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
 		AddFunc:    w.handleAlertmanagerAdd,
 		DeleteFunc: w.handleAlertmanagerDelete,
+	})
+	w.amcInf.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    w.handleAlertmanagerConfigAdd,
+		UpdateFunc: w.handleAlertmanagerConfigUpdate,
+		DeleteFunc: w.handleAlertmanagerConfigDelete,
 	})
 }
 
@@ -280,6 +310,32 @@ func (w *Watcher) checkSvcExists(ns string, annotations map[string]string) (bool
 
 	_, err := w.client.CoreV1().Services(ns).Get(svcName, metav1.GetOptions{})
 
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (w *Watcher) deleteSecret(ns string, secretName string) (bool, error) {
+
+	err := w.client.CoreV1().Secrets(ns).Delete(secretName, &metav1.DeleteOptions{})
+	if err != nil {
+		if apierrors.IsNotFound(err) {
+			return false, nil
+		}
+		return false, err
+	}
+
+	return true, nil
+}
+
+func (w *Watcher) checkSecretExists(ns string, secretName string) (bool, error) {
+
+	_, err := w.client.CoreV1().Secrets(ns).Get(secretName, metav1.GetOptions{})
 	if err != nil {
 		if apierrors.IsNotFound(err) {
 			return false, nil
@@ -355,6 +411,84 @@ func (w *Watcher) createSvc(obj metav1.ObjectMeta, kind string, selector map[str
 	return annotations, nil
 }
 
+func (w *Watcher) formatAlertConfig(params []monitoringv1.Param) ([]byte, error) {
+	var url, channel string
+	for _, param := range params {
+		log.Debugf("Params: %s %s", param.Name, param.Value)
+		if param.Name == "url" {
+			url = param.Value
+		}
+		if param.Name == "channel" {
+			channel = param.Value
+		}
+	}
+
+	if url == "" {
+		log.Error("url field missing in slack config")
+		return nil, os.ErrInvalid
+	}
+
+	if channel == "" {
+		log.Error("channel field missing in slack config")
+		return nil, os.ErrInvalid
+	}
+
+	skcfg := fmt.Sprintf("  slack_configs:\n  - api_url: '%s'\n    channel: '%s'", url, channel)
+	arr := []byte(skcfg)
+
+	file, err := os.Open(configDir + "/alertmanager.yaml")
+	if err != nil {
+		log.Error("Failed to open alert manager config file")
+		return nil, err
+	}
+	defer file.Close()
+	alertmgrSecret, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Error("Failed to read alert manager config file")
+		return nil, err
+	}
+
+	alertmgrSecret = append(alertmgrSecret, arr...)
+
+	return alertmgrSecret, nil
+}
+
+func (w *Watcher) createSecret(obj metav1.ObjectMeta, secretName string, kind string, data []byte) error {
+	secretClient := w.client.CoreV1().Secrets(obj.GetNamespace())
+
+	trueVar := true
+
+	cfg := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      secretName,
+			Namespace: monitoringNS,
+			OwnerReferences: []metav1.OwnerReference{
+				metav1.OwnerReference{
+					APIVersion: monitoringv1.SchemeGroupVersion.String(),
+					Name:       obj.GetName(),
+					Kind:       kind,
+					UID:        obj.GetUID(),
+					Controller: &trueVar,
+				},
+			},
+			Annotations: map[string]string{
+				"created_by": "monhelper",
+			},
+		},
+		Data: map[string][]byte{
+			"alertmanager.yaml": data,
+		},
+	}
+
+	if _, err := secretClient.Create(cfg); err != nil {
+		log.Errorf("Failed to create secret: %s", secretName)
+		return err
+	}
+
+	log.Debugf("Created secret: %s", secretName)
+	return nil
+}
+
 func merge(a, b map[string]string) map[string]string {
 	if a == nil {
 		return b
@@ -374,6 +508,7 @@ func merge(a, b map[string]string) map[string]string {
 }
 
 func (w *Watcher) syncPrometheus(key string) error {
+	log.Debug("In sync Prometheus function")
 	obj, exists, err := w.promInf.GetIndexer().GetByKey(key)
 	if err != nil {
 		return err
@@ -469,4 +604,106 @@ func (w *Watcher) syncAlertManager(key string) error {
 	am.ObjectMeta.Annotations = merge(am.ObjectMeta.Annotations, annotations)
 	_, err = w.mClient.MonitoringV1().Alertmanagers(am.Namespace).Update(am)
 	return err
+}
+
+func (w *Watcher) handleAlertmanagerConfigAdd(obj interface{}) {
+	key, ok := keyFunc(obj)
+	if !ok {
+		return
+	}
+
+	log.Debugf("Alertmanager config added: %s", key)
+
+	enqueue(w.amcQueue, key)
+}
+
+func (w *Watcher) handleAlertmanagerConfigUpdate(oldObj, newObj interface{}) {
+	key, ok := keyFunc(newObj)
+	if !ok {
+		return
+	}
+
+	log.Debugf("Alertmanager config added: %s", key)
+
+	enqueue(w.amcQueue, key)
+}
+
+func (w *Watcher) handleAlertmanagerConfigDelete(obj interface{}) {
+	key, ok := keyFunc(obj)
+	if !ok {
+		return
+	}
+
+	log.Debugf("Alertmanager config deleted: %s", key)
+
+	enqueue(w.amcQueue, key)
+}
+
+func (w *Watcher) syncAlertManagerConfig(key string) error {
+	var alertManagerName string
+	var data []byte
+
+	log.Debugf("syncing alert manager config: key: %s", key)
+	obj, exists, err := w.amcInf.GetIndexer().GetByKey(key)
+	if err != nil {
+		return err
+	}
+
+	if !exists {
+		log.Error("Key not found...")
+		return nil
+	}
+
+	amc := obj.(*monitoringv1.AlertmanagerConfig)
+	if nil == amc {
+		log.Errorf("Got an invalid amc object for: %s", key)
+		return nil
+	}
+
+	log.Debugf("syncing alert manager config: key: %s, name: %s", key, amc.Spec.Type)
+
+	for key, val := range amc.Labels {
+		log.Debugf("Labels: %s %s", key, val)
+		if key == "alertmanager" {
+			alertManagerName = val
+			break
+		}
+	}
+
+	if alertManagerName == "" {
+		log.Errorf("Alert manager label missing in alertmanager config: %s", key)
+		return nil
+	}
+
+	switch amc.Spec.Type {
+	case "slack":
+		log.Debug("Formatting slack configuration")
+		data, err = w.formatAlertConfig(amc.Spec.Params)
+		if err != nil {
+			log.Errorf("Failed to format alert config for: %s", key)
+			return nil
+		}
+	default:
+		log.Errorf("Got an invalid type: %s for %s", amc.Spec.Type, key)
+		return nil
+	}
+
+	secretName := "alertmanager-" + alertManagerName
+
+	exists, _ = w.checkSecretExists(amc.Namespace, secretName)
+	if exists {
+		log.Infof("Secret for alertmanager: %s exists deleting it", key)
+		_, err = w.deleteSecret(amc.Namespace, secretName)
+		if err != nil {
+			log.Errorf("Failed to delete secret: %s", secretName)
+			return nil
+		}
+	}
+
+	err = w.createSecret(amc.ObjectMeta, secretName, monitoringv1.AlertmanagersKind, data)
+	if err != nil {
+		return err
+	}
+	log.Infof("Created secret: %s for %s", secretName, key)
+	return nil
 }
