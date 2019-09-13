@@ -23,6 +23,8 @@ import (
 	"path"
 	"time"
 
+	"gopkg.in/yaml.v2"
+
 	"github.com/platform9/prometheus-plus/pkg/util"
 	"github.com/spf13/viper"
 	"k8s.io/client-go/rest"
@@ -52,8 +54,43 @@ const (
 	alertmanagerPort = 9093
 	suffixLen        = 8
 	configDir        = "/etc/promplus"
-	monitoringNS     = "pf9-operators"
+	monitoringNS     = "pf9-monitoring"
 )
+
+type global struct {
+	ResolveTimeout string `yaml:"resolve_timeout"`
+}
+
+type route struct {
+	GroupBy        []string `yaml:"group_by"`
+	GroupWait      string   `yaml:"group_wait"`
+	GroupInterval  string   `yaml:"group_interval"`
+	RepeatInterval string   `yaml:"repeat_interval"`
+	Receiver       string   `yaml:"receiver"`
+}
+
+type slackconfig struct {
+	ApiURL  string `yaml:"api_url"`
+	Channel string `yaml:"channel"`
+}
+
+type emailconfig struct {
+	To        string `yaml:"to"`
+	From      string `yaml:"from"`
+	SmartHost string `yaml:"smarthost"`
+}
+
+type receiver struct {
+	Name         string        `yaml:"name"`
+	SlackConfigs []slackconfig `yaml:"slack_configs,omitempty"`
+	EmailConfigs []emailconfig `yaml:"email_configs,omitempty"`
+}
+
+type alertConfig struct {
+	Global    global     `yaml:"global"`
+	Route     route      `yaml:"route"`
+	Receivers []receiver `yaml:"receivers"`
+}
 
 // Watcher watches for changes in Prometheus and AlertManager objects
 type Watcher struct {
@@ -195,7 +232,7 @@ func enqueue(queue workqueue.RateLimitingInterface, obj interface{}) {
 
 // Run starts sync workers
 func (w *Watcher) Run(stopc <-chan struct{}) error {
-	log.Info("In prom run")
+	log.Debug("In prom run")
 	defer w.promQueue.ShutDown()
 	defer w.amQueue.ShutDown()
 
@@ -411,46 +448,99 @@ func (w *Watcher) createSvc(obj metav1.ObjectMeta, kind string, selector map[str
 	return annotations, nil
 }
 
-func (w *Watcher) formatAlertConfig(params []monitoringv1.Param) ([]byte, error) {
-	var url, channel string
-	for _, param := range params {
-		log.Debugf("Params: %s %s", param.Name, param.Value)
-		if param.Name == "url" {
-			url = param.Value
+func (w *Watcher) formatReceiver(amc *monitoringv1.AlertmanagerConfig, acfg *alertConfig) error {
+
+	switch amc.Spec.Type {
+	case "slack":
+		log.Debug("Formatting slack configuration")
+		err := w.formatSlackAlert(amc, acfg)
+		if err != nil {
+			log.Errorf("Failed to format alert config for: %s", amc.Name)
+			return nil
 		}
-		if param.Name == "channel" {
+	case "email":
+		log.Debug("Formatting email configuration")
+		err := w.formatEmailAlert(amc, acfg)
+		if err != nil {
+			log.Errorf("Failed to format alert config for: %s", amc.Name)
+			return nil
+		}
+
+	default:
+		log.Errorf("Got an invalid type: %s for %s", amc.Spec.Type, amc.Name)
+		return nil
+	}
+	return nil
+}
+
+func (w *Watcher) formatSlackAlert(amc *monitoringv1.AlertmanagerConfig, acfg *alertConfig) error {
+	var url, channel string
+	for _, param := range amc.Spec.Params {
+		log.Debugf("Params: %s %s", param.Name, param.Value)
+		switch param.Name {
+		case "url":
+			url = param.Value
+		case "channel":
 			channel = param.Value
 		}
 	}
 
 	if url == "" {
 		log.Error("url field missing in slack config")
-		return nil, os.ErrInvalid
+		return os.ErrInvalid
 	}
 
 	if channel == "" {
 		log.Error("channel field missing in slack config")
-		return nil, os.ErrInvalid
+		return os.ErrInvalid
 	}
 
-	skcfg := fmt.Sprintf("  slack_configs:\n  - api_url: '%s'\n    channel: '%s'", url, channel)
-	arr := []byte(skcfg)
+	acfg.Receivers[0].SlackConfigs = append(acfg.Receivers[0].SlackConfigs,
+		slackconfig{
+			ApiURL:  url,
+			Channel: channel,
+		})
 
-	file, err := os.Open(configDir + "/alertmanager.yaml")
-	if err != nil {
-		log.Error("Failed to open alert manager config file")
-		return nil, err
+	return nil
+}
+
+func (w *Watcher) formatEmailAlert(amc *monitoringv1.AlertmanagerConfig, acfg *alertConfig) error {
+	var to, from, smarthost string
+	for _, param := range amc.Spec.Params {
+		log.Debugf("Params: %s %s", param.Name, param.Value)
+		switch param.Name {
+		case "to":
+			to = param.Value
+		case "from":
+			from = param.Value
+		case "smarthost":
+			smarthost = param.Value
+		}
 	}
-	defer file.Close()
-	alertmgrSecret, err := ioutil.ReadAll(file)
-	if err != nil {
-		log.Error("Failed to read alert manager config file")
-		return nil, err
+
+	if to == "" {
+		log.Error("to field missing in email config")
+		return os.ErrInvalid
 	}
 
-	alertmgrSecret = append(alertmgrSecret, arr...)
+	if from == "" {
+		log.Error("from field missing in email config")
+		return os.ErrInvalid
+	}
 
-	return alertmgrSecret, nil
+	if smarthost == "" {
+		log.Error("smarthost field missing in email config")
+		return os.ErrInvalid
+	}
+
+	acfg.Receivers[0].EmailConfigs = append(acfg.Receivers[0].EmailConfigs,
+		emailconfig{
+			To:        to,
+			From:      from,
+			SmartHost: smarthost,
+		})
+
+	return nil
 }
 
 func (w *Watcher) createSecret(obj metav1.ObjectMeta, secretName string, kind string, data []byte) error {
@@ -641,7 +731,6 @@ func (w *Watcher) handleAlertmanagerConfigDelete(obj interface{}) {
 
 func (w *Watcher) syncAlertManagerConfig(key string) error {
 	var alertManagerName string
-	var data []byte
 
 	log.Debugf("syncing alert manager config: key: %s", key)
 	obj, exists, err := w.amcInf.GetIndexer().GetByKey(key)
@@ -650,7 +739,7 @@ func (w *Watcher) syncAlertManagerConfig(key string) error {
 	}
 
 	if !exists {
-		log.Error("Key not found...")
+		log.Errorf("Key %s not found...", key)
 		return nil
 	}
 
@@ -660,8 +749,7 @@ func (w *Watcher) syncAlertManagerConfig(key string) error {
 		return nil
 	}
 
-	log.Debugf("syncing alert manager config: key: %s, name: %s", key, amc.Spec.Type)
-
+	log.Debugf("syncing alert manager config: key: %s, type: %s", key, amc.Spec.Type)
 	for key, val := range amc.Labels {
 		log.Debugf("Labels: %s %s", key, val)
 		if key == "alertmanager" {
@@ -669,23 +757,59 @@ func (w *Watcher) syncAlertManagerConfig(key string) error {
 			break
 		}
 	}
+	log.Debugf("Alert manager label: %s", alertManagerName)
 
 	if alertManagerName == "" {
 		log.Errorf("Alert manager label missing in alertmanager config: %s", key)
 		return nil
 	}
 
-	switch amc.Spec.Type {
-	case "slack":
-		log.Debug("Formatting slack configuration")
-		data, err = w.formatAlertConfig(amc.Spec.Params)
-		if err != nil {
-			log.Errorf("Failed to format alert config for: %s", key)
-			return nil
+	file, err := os.Open(configDir + "/alertmanager.yaml")
+	if err != nil {
+		log.Error("Failed to open alert manager config file", err)
+		return os.ErrInvalid
+	}
+	defer file.Close()
+	data, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Error("Failed to read alert manager config file", err)
+		return os.ErrInvalid
+	}
+
+	var acfg alertConfig
+	yaml.Unmarshal(data, &acfg)
+
+	err = w.formatReceiver(amc, &acfg)
+	if err != nil {
+		log.Errorf("Failed to format receiver for: %s", amc.Spec.Type)
+		return err
+	}
+
+	var options metav1.ListOptions
+	var amcList *monitoringv1.AlertmanagerConfigList
+	amcList, err = w.mClient.MonitoringV1().AlertmanagerConfigs(metav1.NamespaceAll).List(options)
+	if err != nil {
+		log.Error("Failed to get list of alert manager config objects ", err)
+		return err
+	}
+	for _, amcItr := range amcList.Items {
+		log.Debugf("Name: %s, ns: %s", amcItr.Name, amcItr.Namespace)
+
+		for key, val := range amcItr.Labels {
+			log.Infof("Labels: %s %s", key, val)
+			if key == "alertmanager" && val == alertManagerName {
+				if amc.Name == amcItr.Name {
+					log.Debugf("Ignoring current amc object: %s", amcItr.Name)
+					continue
+				}
+				log.Debugf("Formatting receiver for: %s", amcItr.Name)
+				err = w.formatReceiver(amcItr, &acfg)
+				if err != nil {
+					log.Errorf("Failed to format receiver for: %s", amc.Spec.Type)
+					return err
+				}
+			}
 		}
-	default:
-		log.Errorf("Got an invalid type: %s for %s", amc.Spec.Type, key)
-		return nil
 	}
 
 	secretName := "alertmanager-" + alertManagerName
@@ -696,8 +820,14 @@ func (w *Watcher) syncAlertManagerConfig(key string) error {
 		_, err = w.deleteSecret(amc.Namespace, secretName)
 		if err != nil {
 			log.Errorf("Failed to delete secret: %s", secretName)
-			return nil
+			return err
 		}
+	}
+
+	data, err = yaml.Marshal(&acfg)
+	if err != nil {
+		log.Error("Failed to marshal alert mgr secret ", err)
+		return err
 	}
 
 	err = w.createSecret(amc.ObjectMeta, secretName, monitoringv1.AlertmanagersKind, data)

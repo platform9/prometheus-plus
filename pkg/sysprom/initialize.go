@@ -44,7 +44,7 @@ import (
 const (
 	prometheusPort   = 9090
 	alertmanagerPort = 9093
-	monitoringNS     = "pf9-operators"
+	monitoringNS     = "pf9-monitoring"
 	configDir        = "/etc/promplus"
 )
 
@@ -222,7 +222,7 @@ func createPrometheus(w *InitConfig) error {
 					"role":       "service-monitor",
 				},
 			},
-			ServiceAccountName: "prometheus-operator-0-23-2",
+			ServiceAccountName: "system-prometheus",
 			Replicas:           &replicas,
 			Retention:          "15d",
 			RuleSelector: &metav1.LabelSelector{
@@ -240,7 +240,7 @@ func createPrometheus(w *InitConfig) error {
 			Alerting: &monitoringv1.AlertingSpec{
 				[]monitoringv1.AlertmanagerEndpoints{
 					monitoringv1.AlertmanagerEndpoints{
-						Name:      "alertmanager-sysalert",
+						Name:      "sys-alertmanager",
 						Namespace: monitoringNS,
 						Port:      intstr.FromString("web"),
 					},
@@ -257,11 +257,11 @@ func createPrometheus(w *InitConfig) error {
 	serviceClient := w.client.CoreV1().Services(monitoringNS)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "prometheus",
+			Name:      "sys-prometheus",
 			Namespace: monitoringNS,
 		},
 		Spec: apiv1.ServiceSpec{
-			Type: "NodePort",
+			Type: "ClusterIP",
 			Selector: map[string]string{
 				"prometheus": "system",
 			},
@@ -269,7 +269,6 @@ func createPrometheus(w *InitConfig) error {
 				{
 					Name:     "web",
 					Port:     9090,
-					NodePort: 30900,
 					Protocol: "TCP",
 				},
 			},
@@ -384,17 +383,24 @@ func createServiceMonitor(w *InitConfig) error {
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Endpoints: []monitoringv1.Endpoint{
 				monitoringv1.Endpoint{
-					Port: "https",
+					Port: "web",
 				},
 			},
 			Selector: metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "node-exporter",
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					metav1.LabelSelectorRequirement{
+						Key:      "app",
+						Operator: metav1.LabelSelectorOpIn,
+						Values: []string{
+							"node-exporter",
+							"kube-state-metrics",
+						},
+					},
 				},
 			},
 			NamespaceSelector: monitoringv1.NamespaceSelector{
 				MatchNames: []string{
-					"pf9-monitoring",
+					monitoringNS,
 				},
 			},
 		},
@@ -451,7 +457,7 @@ func createAlertManager(w *InitConfig) error {
 			Namespace: monitoringNS,
 		},
 		Spec: monitoringv1.AlertmanagerSpec{
-			ServiceAccountName: "prometheus",
+			ServiceAccountName: "system-prometheus",
 			Replicas:           &replicas,
 			Resources: apiv1.ResourceRequirements{
 				Requests: map[apiv1.ResourceName]resource.Quantity{
@@ -470,11 +476,11 @@ func createAlertManager(w *InitConfig) error {
 	serviceClient := w.client.CoreV1().Services(monitoringNS)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "alertmanager-sysalert",
+			Name:      "sys-alertmanager",
 			Namespace: monitoringNS,
 		},
 		Spec: apiv1.ServiceSpec{
-			Type: "NodePort",
+			Type: "ClusterIP",
 			Selector: map[string]string{
 				"alertmanager": "sysalert",
 			},
@@ -482,7 +488,6 @@ func createAlertManager(w *InitConfig) error {
 				{
 					Name:     "web",
 					Port:     9093,
-					NodePort: 30903,
 					Protocol: "TCP",
 				},
 			},
