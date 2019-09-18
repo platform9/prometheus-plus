@@ -625,8 +625,9 @@ func createGrafana(w *InitConfig) error {
 				Spec: apiv1.PodSpec{
 					Containers: []apiv1.Container{
 						{
-							Name:  "proxy",
-							Image: "nginx",
+							Name:            "proxy",
+							Image:           "nginx",
+							ImagePullPolicy: "IfNotPresent",
 							Ports: []apiv1.ContainerPort{
 								{
 									ContainerPort: 80,

@@ -92,6 +92,10 @@ type alertConfig struct {
 	Receivers []receiver `yaml:"receivers"`
 }
 
+type format interface {
+	formatAlert(amc *monitoringv1.AlertmanagerConfig, acfg *alertConfig) error
+}
+
 // Watcher watches for changes in Prometheus and AlertManager objects
 type Watcher struct {
 	client    kubernetes.Interface
@@ -448,32 +452,42 @@ func (w *Watcher) createSvc(obj metav1.ObjectMeta, kind string, selector map[str
 	return annotations, nil
 }
 
+func (w *Watcher) getFormater(ftype string) (format, error) {
+	var f format
+	switch ftype {
+	case "slack":
+		log.Debug("Creating slack object")
+		f = slackconfig{}
+	case "email":
+		log.Debug("Creating email object")
+		f = emailconfig{}
+	default:
+		log.Errorf("Got an invalid type: %s", ftype)
+		return nil, os.ErrInvalid
+	}
+
+	return f, nil
+}
+
 func (w *Watcher) formatReceiver(amc *monitoringv1.AlertmanagerConfig, acfg *alertConfig) error {
 
-	switch amc.Spec.Type {
-	case "slack":
-		log.Debug("Formatting slack configuration")
-		err := w.formatSlackAlert(amc, acfg)
-		if err != nil {
-			log.Errorf("Failed to format alert config for: %s", amc.Name)
-			return nil
-		}
-	case "email":
-		log.Debug("Formatting email configuration")
-		err := w.formatEmailAlert(amc, acfg)
-		if err != nil {
-			log.Errorf("Failed to format alert config for: %s", amc.Name)
-			return nil
-		}
-
-	default:
-		log.Errorf("Got an invalid type: %s for %s", amc.Spec.Type, amc.Name)
-		return nil
+	var f format
+	f, err := w.getFormater(amc.Spec.Type)
+	if err != nil {
+		log.Errorf("Failed to create a formatter: %s for %s", amc.Spec.Type, amc.Name)
+		return err
 	}
+
+	err = f.formatAlert(amc, acfg)
+	if err != nil {
+		log.Errorf("Failed to format alert: %s for %s", amc.Spec.Type, amc.Name)
+		return err
+	}
+
 	return nil
 }
 
-func (w *Watcher) formatSlackAlert(amc *monitoringv1.AlertmanagerConfig, acfg *alertConfig) error {
+func (f slackconfig) formatAlert(amc *monitoringv1.AlertmanagerConfig, acfg *alertConfig) error {
 	var url, channel string
 	for _, param := range amc.Spec.Params {
 		log.Debugf("Params: %s %s", param.Name, param.Value)
@@ -504,7 +518,7 @@ func (w *Watcher) formatSlackAlert(amc *monitoringv1.AlertmanagerConfig, acfg *a
 	return nil
 }
 
-func (w *Watcher) formatEmailAlert(amc *monitoringv1.AlertmanagerConfig, acfg *alertConfig) error {
+func (f emailconfig) formatAlert(amc *monitoringv1.AlertmanagerConfig, acfg *alertConfig) error {
 	var to, from, smarthost string
 	for _, param := range amc.Spec.Params {
 		log.Debugf("Params: %s %s", param.Name, param.Value)
