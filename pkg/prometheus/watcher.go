@@ -452,7 +452,7 @@ func (w *Watcher) createSvc(obj metav1.ObjectMeta, kind string, selector map[str
 	return annotations, nil
 }
 
-func (w *Watcher) getFormater(ftype string) (format, error) {
+func (w *Watcher) getFormatter(ftype string) (format, error) {
 	var f format
 	switch ftype {
 	case "slack":
@@ -472,7 +472,7 @@ func (w *Watcher) getFormater(ftype string) (format, error) {
 func (w *Watcher) formatReceiver(amc *monitoringv1.AlertmanagerConfig, acfg *alertConfig) error {
 
 	var f format
-	f, err := w.getFormater(amc.Spec.Type)
+	f, err := w.getFormatter(amc.Spec.Type)
 	if err != nil {
 		log.Errorf("Failed to create a formatter: %s for %s", amc.Spec.Type, amc.Name)
 		return err

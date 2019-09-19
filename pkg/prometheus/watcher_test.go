@@ -1,5 +1,21 @@
 package prometheus
 
+/*
+ Copyright [2019] [Platform9 Systems, Inc]
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License.
+*/
+
 import (
 	"flag"
 	"reflect"
@@ -10,23 +26,26 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+var w *Watcher
+
+func TestMain(m *testing.M) {
+	w = &Watcher{}
+}
 func init() {
 	viper.Set("mode", flag.String("mode", "standalone", "kubernetes configuration mode"))
 }
 
 func TestGetByKubeCfg(t *testing.T) {
-	w := getConfig(t)
 	assert.Equal(t, reflect.TypeOf(w), reflect.TypeOf(&Watcher{}))
 }
 
-func TestGetFormater(t *testing.T) {
+func TestGetFormatter(t *testing.T) {
 	var f format
-	w := getConfig(t)
-	f, err := w.getFormater("slack")
+	f, err := w.getFormatter("slack")
 	assert.Equal(t, nil, err)
 	assert.Equal(t, reflect.TypeOf(f), reflect.TypeOf(slackconfig{}))
 
-	f, err = w.getFormater("email")
+	f, err = w.getFormatter("email")
 	assert.Equal(t, nil, err)
 	assert.Equal(t, reflect.TypeOf(f), reflect.TypeOf(emailconfig{}))
 }
@@ -58,7 +77,6 @@ func TestSlackFormat(t *testing.T) {
 			},
 		},
 	}
-	w := getConfig(t)
 	err := w.formatReceiver(&amc, &acfg)
 	assert.Equal(t, nil, err)
 
@@ -99,19 +117,10 @@ func TestEmailFormat(t *testing.T) {
 		},
 	}
 
-	w := getConfig(t)
 	err := w.formatReceiver(&amc, &acfg)
 	assert.Equal(t, nil, err)
 
 	assert.Equal(t, acfg.Receivers[0].EmailConfigs[0].To, to)
 	assert.Equal(t, acfg.Receivers[0].EmailConfigs[0].From, from)
 	assert.Equal(t, acfg.Receivers[0].EmailConfigs[0].SmartHost, smarthost)
-}
-
-func getConfig(t *testing.T) *Watcher {
-	w, err := New()
-	if err != nil {
-		t.Fatalf("Error occured while getting kubernetes config. Error is: %s", err.Error())
-	}
-	return w
 }
