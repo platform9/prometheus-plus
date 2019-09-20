@@ -49,9 +49,32 @@ import (
 const (
 	prometheusPort   = 9090
 	alertmanagerPort = 9093
-	monitoringNS     = "pf9-operators"
+	monitoringNS     = "pf9-monitoring"
 	configDir        = "/etc/promplus"
 )
+
+//SystemPrometheusConfig stores system prometheus configuration
+type SystemPrometheusConfig struct {
+	grafanaCPUResource      string
+	grafanaMemResource      string
+	prometheusCPUResource   string
+	prometheusMemResource   string
+	alertmanagerCPUResource string
+	alertmanagerMemResource string
+
+	prometheusSvcName   string
+	alertmanagerSvcName string
+	grafanaSvcName      string
+
+	crdWaitTime int
+
+	portName                 string
+	prometheusInstanceName   string
+	alertmanagerInstanceName string
+
+	prometheusRetentionTime string
+	svcMonLabels            []string
+}
 
 // InitConfig stores configuration all system prometheus objects
 type InitConfig struct {
@@ -59,6 +82,7 @@ type InitConfig struct {
 	client    kubernetes.Interface
 	mClient   monitoringclient.Interface
 	crdclient clientset.Interface
+	sysCfg    *SystemPrometheusConfig
 }
 
 // PromRules stores all default system prometheus rules
@@ -77,6 +101,54 @@ func new() (*InitConfig, error) {
 	}
 
 	return nil, errors.New("Invalid mode")
+}
+
+func getEnv(env, def string) string {
+	value, exists := os.LookupEnv(env)
+	if exists {
+		return value
+	}
+	return def
+}
+
+func getSystemPrometheusEnv() (systemcfg *SystemPrometheusConfig) {
+
+	var syscfg SystemPrometheusConfig
+	waitPeriod := getEnv("CRD_WAIT_TIME_MIN", "10")
+	syscfg.crdWaitTime, _ = strconv.Atoi(waitPeriod)
+
+	syscfg.prometheusCPUResource = getEnv("PROMETHEUS_CPU_RESOURCE", "500m")
+	syscfg.prometheusMemResource = getEnv("PROMETHEUS_MEM_RESOURCE", "512Mi")
+
+	syscfg.alertmanagerCPUResource = getEnv("ALERTMANAGER_CPU_RESOURCE", "100m")
+	syscfg.alertmanagerMemResource = getEnv("ALERTMANAGER_MEM_RESOURCE", "512Mi")
+
+	syscfg.grafanaCPUResource = getEnv("GRAFANA_CPU_RESOURCE", "100m")
+	syscfg.grafanaMemResource = getEnv("GRAFANA_MEM_RESOURCE", "100Mi")
+
+	syscfg.prometheusInstanceName = getEnv("PROMETHEUS_INSTANCE_NAME", "system")
+	syscfg.alertmanagerInstanceName = getEnv("ALERTMANAGER_INSTANCE_NAME", "sysalert")
+
+	syscfg.prometheusSvcName = getEnv("PROMETHEUS_SVC_NAME", "sys-prometheus")
+	syscfg.alertmanagerSvcName = getEnv("ALERTMANAGER_SVC_NAME", "sys-alertmanager")
+	syscfg.grafanaSvcName = getEnv("GRAFANA_SVC_NAME", "grafana-ui")
+
+	syscfg.portName = getEnv("PORT_NAME", "web")
+
+	syscfg.prometheusRetentionTime = getEnv("PROMETHEUS_RETENTION_TIME", "15d")
+
+	defSvcMonLabel := []string{
+		"node-exporter",
+		"kube-state-metrics",
+	}
+
+	svcMonLabels := getEnv("SERVICE_MONITOR_LABELS", "")
+	if svcMonLabels == "" {
+		syscfg.svcMonLabels = defSvcMonLabel
+	} else {
+		syscfg.svcMonLabels = strings.Split(svcMonLabels, ",")
+	}
+	return &syscfg
 }
 
 func buildInitConfig(cfg *rest.Config) (*InitConfig, error) {
@@ -100,6 +172,7 @@ func buildInitConfig(cfg *rest.Config) (*InitConfig, error) {
 		client:    client,
 		mClient:   mclient,
 		crdclient: crdclient,
+		sysCfg:    getSystemPrometheusEnv(),
 	}, nil
 }
 
@@ -202,12 +275,7 @@ func waitForCRD(w *InitConfig) error {
 	}
 
 	// Set timeout value for wait
-	var waitPeriodValue int = 10
-	waitPeriod, exists := os.LookupEnv("CRD_WAIT_TIME_MIN")
-	if exists {
-		waitPeriodValue, _ = strconv.Atoi(waitPeriod)
-	}
-	timeout := time.After(time.Duration(waitPeriodValue) * time.Minute)
+	timeout := time.After(time.Duration(w.sysCfg.crdWaitTime) * time.Minute)
 	tick := time.Tick(10 * time.Second)
 
 	for _, value := range crds {
@@ -237,17 +305,8 @@ func waitForCRD(w *InitConfig) error {
 func createPrometheus(w *InitConfig) error {
 	var replicas int32
 	replicas = 1
-	cpuResource, exists := os.LookupEnv("PROMETHEUS_CPU_RESOURCE")
-	if !exists {
-		cpuResource = "500m"
-	}
-	cpu, _ := resource.ParseQuantity(cpuResource)
-
-	memResource, exists := os.LookupEnv("PROMETHEUS_MEM_RESOURCE")
-	if !exists {
-		memResource = "512Mi"
-	}
-	mem, _ := resource.ParseQuantity(memResource)
+	cpu, _ := resource.ParseQuantity(w.sysCfg.prometheusCPUResource)
+	mem, _ := resource.ParseQuantity(w.sysCfg.prometheusMemResource)
 
 	promclientset, err := prometheus.NewForConfig(w.cfg)
 	if err != nil {
@@ -258,22 +317,22 @@ func createPrometheus(w *InitConfig) error {
 	prometheusClient := promclientset.Prometheuses(monitoringNS)
 	promObject := &monitoringv1.Prometheus{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "system",
+			Name:      w.sysCfg.prometheusInstanceName,
 			Namespace: monitoringNS,
 		},
 		Spec: monitoringv1.PrometheusSpec{
 			ServiceMonitorSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"prometheus": "system",
+					"prometheus": w.sysCfg.prometheusInstanceName,
 					"role":       "service-monitor",
 				},
 			},
-			ServiceAccountName: "prometheus-operator-0-23-2",
+			ServiceAccountName: "system-prometheus",
 			Replicas:           &replicas,
-			Retention:          "15d",
+			Retention:          w.sysCfg.prometheusRetentionTime,
 			RuleSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
-					"prometheus": "system",
+					"prometheus": w.sysCfg.prometheusInstanceName,
 					"role":       "alert-rules",
 				},
 			},
@@ -286,9 +345,9 @@ func createPrometheus(w *InitConfig) error {
 			Alerting: &monitoringv1.AlertingSpec{
 				[]monitoringv1.AlertmanagerEndpoints{
 					monitoringv1.AlertmanagerEndpoints{
-						Name:      "alertmanager-sysalert",
+						Name:      w.sysCfg.alertmanagerSvcName,
 						Namespace: monitoringNS,
-						Port:      intstr.FromString("web"),
+						Port:      intstr.FromString(w.sysCfg.portName),
 					},
 				},
 			},
@@ -303,19 +362,18 @@ func createPrometheus(w *InitConfig) error {
 	serviceClient := w.client.CoreV1().Services(monitoringNS)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "prometheus",
+			Name:      w.sysCfg.prometheusSvcName,
 			Namespace: monitoringNS,
 		},
 		Spec: apiv1.ServiceSpec{
-			Type: "NodePort",
+			Type: "ClusterIP",
 			Selector: map[string]string{
-				"prometheus": "system",
+				"prometheus": w.sysCfg.prometheusInstanceName,
 			},
 			Ports: []apiv1.ServicePort{
 				{
-					Name:     "web",
+					Name:     w.sysCfg.portName,
 					Port:     9090,
-					NodePort: 30900,
 					Protocol: "TCP",
 				},
 			},
@@ -328,8 +386,8 @@ func createPrometheus(w *InitConfig) error {
 
 	return nil
 }
-
 func createPrometheusRules(w *InitConfig) error {
+
 	promclientset, err := prometheus.NewForConfig(w.cfg)
 	if err != nil {
 		return err
@@ -349,7 +407,7 @@ func createPrometheusRules(w *InitConfig) error {
 			Name:      "system-prometheus-rules",
 			Namespace: monitoringNS,
 			Labels: map[string]string{
-				"prometheus": "system",
+				"prometheus": w.sysCfg.prometheusInstanceName,
 				"role":       "alert-rules",
 			},
 		},
@@ -379,24 +437,28 @@ func createServiceMonitor(w *InitConfig) error {
 			Name:      "system-service-monitor",
 			Namespace: monitoringNS,
 			Labels: map[string]string{
-				"prometheus": "system",
+				"prometheus": w.sysCfg.prometheusInstanceName,
 				"role":       "service-monitor",
 			},
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
 			Endpoints: []monitoringv1.Endpoint{
 				monitoringv1.Endpoint{
-					Port: "https",
+					Port: w.sysCfg.portName,
 				},
 			},
 			Selector: metav1.LabelSelector{
-				MatchLabels: map[string]string{
-					"app": "node-exporter",
+				MatchExpressions: []metav1.LabelSelectorRequirement{
+					metav1.LabelSelectorRequirement{
+						Key:      "app",
+						Operator: metav1.LabelSelectorOpIn,
+						Values:   w.sysCfg.svcMonLabels,
+					},
 				},
 			},
 			NamespaceSelector: monitoringv1.NamespaceSelector{
 				MatchNames: []string{
-					"pf9-monitoring",
+					monitoringNS,
 				},
 			},
 		},
@@ -413,17 +475,8 @@ func createServiceMonitor(w *InitConfig) error {
 func createAlertManager(w *InitConfig) error {
 	var replicas int32
 	replicas = 1
-	cpuResource, exists := os.LookupEnv("ALERTMANAGER_CPU_RESOURCE")
-	if !exists {
-		cpuResource = "100m"
-	}
-	cpu, _ := resource.ParseQuantity(cpuResource)
-
-	memResource, exists := os.LookupEnv("ALERTMANAGER_MEM_RESOURCE")
-	if !exists {
-		memResource = "512Mi"
-	}
-	mem, _ := resource.ParseQuantity(memResource)
+	cpu, _ := resource.ParseQuantity(w.sysCfg.alertmanagerCPUResource)
+	mem, _ := resource.ParseQuantity(w.sysCfg.alertmanagerMemResource)
 
 	file, err := os.Open(configDir + "/alertmanager.yaml")
 	if err != nil {
@@ -435,7 +488,7 @@ func createAlertManager(w *InitConfig) error {
 		return err
 	}
 
-	err = createSecret(w, "alertmanager-sysalert", monitoringNS, "alertmanager.yaml", alertmgrSecret)
+	err = createSecret(w, "alertmanager-"+w.sysCfg.alertmanagerInstanceName, monitoringNS, "alertmanager.yaml", alertmgrSecret)
 	if err != nil {
 		return err
 	}
@@ -449,11 +502,11 @@ func createAlertManager(w *InitConfig) error {
 	alertMgrClient := promclientset.Alertmanagers(monitoringNS)
 	alertMgrObject := &monitoringv1.Alertmanager{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "sysalert",
+			Name:      w.sysCfg.alertmanagerInstanceName,
 			Namespace: monitoringNS,
 		},
 		Spec: monitoringv1.AlertmanagerSpec{
-			ServiceAccountName: "prometheus",
+			ServiceAccountName: "system-prometheus",
 			Replicas:           &replicas,
 			Resources: apiv1.ResourceRequirements{
 				Requests: map[apiv1.ResourceName]resource.Quantity{
@@ -472,19 +525,18 @@ func createAlertManager(w *InitConfig) error {
 	serviceClient := w.client.CoreV1().Services(monitoringNS)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "alertmanager-sysalert",
+			Name:      w.sysCfg.alertmanagerSvcName,
 			Namespace: monitoringNS,
 		},
 		Spec: apiv1.ServiceSpec{
-			Type: "NodePort",
+			Type: "ClusterIP",
 			Selector: map[string]string{
-				"alertmanager": "sysalert",
+				"alertmanager": w.sysCfg.alertmanagerInstanceName,
 			},
 			Ports: []apiv1.ServicePort{
 				{
-					Name:     "web",
+					Name:     w.sysCfg.portName,
 					Port:     9093,
-					NodePort: 30903,
 					Protocol: "TCP",
 				},
 			},
@@ -501,17 +553,9 @@ func createAlertManager(w *InitConfig) error {
 func createGrafana(w *InitConfig) error {
 	var replicas int32
 	replicas = 1
-	cpuResource, exists := os.LookupEnv("GRAFANA_CPU_RESOURCE")
-	if !exists {
-		cpuResource = "100m"
-	}
-	cpu, _ := resource.ParseQuantity(cpuResource)
+	cpu, _ := resource.ParseQuantity(w.sysCfg.grafanaCPUResource)
 
-	memResource, exists := os.LookupEnv("GRAFANA_MEM_RESOURCE")
-	if !exists {
-		memResource = "100Mi"
-	}
-	mem, _ := resource.ParseQuantity(memResource)
+	mem, _ := resource.ParseQuantity(w.sysCfg.grafanaMemResource)
 
 	// Create Secret for Grafana
 	file, err := os.Open(configDir + "/grafana-datasources")
@@ -582,8 +626,9 @@ func createGrafana(w *InitConfig) error {
 				Spec: apiv1.PodSpec{
 					Containers: []apiv1.Container{
 						{
-							Name:  "proxy",
-							Image: "nginx",
+							Name:            "proxy",
+							Image:           "nginx",
+							ImagePullPolicy: "IfNotPresent",
 							Ports: []apiv1.ContainerPort{
 								{
 									ContainerPort: 80,
@@ -755,7 +800,7 @@ func createGrafana(w *InitConfig) error {
 	serviceClient := w.client.CoreV1().Services(monitoringNS)
 	service := &apiv1.Service{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      "grafana-ui",
+			Name:      w.sysCfg.grafanaSvcName,
 			Namespace: monitoringNS,
 		},
 		Spec: apiv1.ServiceSpec{
