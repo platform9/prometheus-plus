@@ -31,9 +31,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.APIServerConfig":       schema_pkg_apis_monitoring_v1_APIServerConfig(ref),
 		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertingSpec":          schema_pkg_apis_monitoring_v1_AlertingSpec(ref),
 		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.Alertmanager":          schema_pkg_apis_monitoring_v1_Alertmanager(ref),
-		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerConfig":     schema_pkg_apis_monitoring_v1_AlertmanagerConfig(ref),
-		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerConfigList": schema_pkg_apis_monitoring_v1_AlertmanagerConfigList(ref),
-		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerConfigSpec": schema_pkg_apis_monitoring_v1_AlertmanagerConfigSpec(ref),
 		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerEndpoints": schema_pkg_apis_monitoring_v1_AlertmanagerEndpoints(ref),
 		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerList":      schema_pkg_apis_monitoring_v1_AlertmanagerList(ref),
 		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerSpec":      schema_pkg_apis_monitoring_v1_AlertmanagerSpec(ref),
@@ -41,7 +38,6 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.BasicAuth":             schema_pkg_apis_monitoring_v1_BasicAuth(ref),
 		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.Endpoint":              schema_pkg_apis_monitoring_v1_Endpoint(ref),
 		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.NamespaceSelector":     schema_pkg_apis_monitoring_v1_NamespaceSelector(ref),
-		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.Param":                 schema_pkg_apis_monitoring_v1_Param(ref),
 		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.Prometheus":            schema_pkg_apis_monitoring_v1_Prometheus(ref),
 		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.PrometheusList":        schema_pkg_apis_monitoring_v1_PrometheusList(ref),
 		"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.PrometheusRule":        schema_pkg_apis_monitoring_v1_PrometheusRule(ref),
@@ -426,134 +422,6 @@ func schema_pkg_apis_monitoring_v1_Alertmanager(ref common.ReferenceCallback) co
 			"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerSpec", "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerStatus"},
 	}
 }
-
-func schema_pkg_apis_monitoring_v1_AlertmanagerConfig(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "AlertmanagerConfig defines config for a Alertmanager instance",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"kind": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"apiVersion": {
-						SchemaProps: spec.SchemaProps{
-							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"metadata": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Standard object’s metadata. More info: http://releases.k8s.io/HEAD/docs/devel/api-conventions.md#metadata",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"),
-						},
-					},
-					"spec": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Specification of desired alerting rule definitions for Prometheus.",
-							Ref:         ref("github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerConfigSpec"),
-						},
-					},
-				},
-				Required: []string{"spec"},
-			},
-		},
-		Dependencies: []string{
-			"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerConfigSpec", "k8s.io/apimachinery/pkg/apis/meta/v1.ObjectMeta"},
-	}
-}
-
-func schema_pkg_apis_monitoring_v1_AlertmanagerConfigList(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "AlertmanagerConfigList is a list of AlertmanagerConfig.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"kind": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"apiVersion": {
-						SchemaProps: spec.SchemaProps{
-							Description: "APIVersion defines the versioned schema of this representation of an object. Servers should convert recognized schemas to the latest internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"metadata": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Standard list metadata More info: http://releases.k8s.io/HEAD/docs/devel/api-conventions.md#metadata",
-							Ref:         ref("k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"),
-						},
-					},
-					"items": {
-						SchemaProps: spec.SchemaProps{
-							Description: "List of Rules",
-							Type:        []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerConfig"),
-									},
-								},
-							},
-						},
-					},
-				},
-				Required: []string{"items"},
-			},
-		},
-		Dependencies: []string{
-			"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerConfig", "k8s.io/apimachinery/pkg/apis/meta/v1.ListMeta"},
-	}
-}
-
-func schema_pkg_apis_monitoring_v1_AlertmanagerConfigSpec(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "AlertmanagerConfigSpec contains specification parameters for Alerting config.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"type": {
-						SchemaProps: spec.SchemaProps{
-							Description: "Content of Alert Manger receiver config",
-							Type:        []string{"string"},
-							Format:      "",
-						},
-					},
-					"params": {
-						SchemaProps: spec.SchemaProps{
-							Type: []string{"array"},
-							Items: &spec.SchemaOrArray{
-								Schema: &spec.Schema{
-									SchemaProps: spec.SchemaProps{
-										Ref: ref("github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.Param"),
-									},
-								},
-							},
-						},
-					},
-				},
-				Required: []string{"type"},
-			},
-		},
-		Dependencies: []string{
-			"github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.Param"},
-	}
-}
-
-
 
 func schema_pkg_apis_monitoring_v1_AlertmanagerEndpoints(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{
@@ -1152,35 +1020,6 @@ func schema_pkg_apis_monitoring_v1_NamespaceSelector(ref common.ReferenceCallbac
 		},
 	}
 }
-
-func schema_pkg_apis_monitoring_v1_Param(ref common.ReferenceCallback) common.OpenAPIDefinition {
-	return common.OpenAPIDefinition{
-		Schema: spec.Schema{
-			SchemaProps: spec.SchemaProps{
-				Description: "Param is a list of alerting receivers.",
-				Type:        []string{"object"},
-				Properties: map[string]spec.Schema{
-					"name": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-					"value": {
-						SchemaProps: spec.SchemaProps{
-							Type:   []string{"string"},
-							Format: "",
-						},
-					},
-				},
-				Required: []string{"name", "value"},
-			},
-		},
-	}
-}
-
-
-
 
 func schema_pkg_apis_monitoring_v1_Prometheus(ref common.ReferenceCallback) common.OpenAPIDefinition {
 	return common.OpenAPIDefinition{

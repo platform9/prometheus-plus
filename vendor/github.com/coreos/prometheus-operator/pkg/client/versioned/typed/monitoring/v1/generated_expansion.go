@@ -18,8 +18,6 @@ package v1
 
 type AlertmanagerExpansion interface{}
 
-type AlertmanagerConfigExpansion interface{}
-
 type PrometheusExpansion interface{}
 
 type PrometheusRuleExpansion interface{}

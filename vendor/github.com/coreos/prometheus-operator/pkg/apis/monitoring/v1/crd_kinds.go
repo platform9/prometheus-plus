@@ -26,21 +26,19 @@ type CrdKind struct {
 }
 
 type CrdKinds struct {
-	KindsString        string
-	Prometheus         CrdKind
-	Alertmanager       CrdKind
-	ServiceMonitor     CrdKind
-	PrometheusRule     CrdKind
-	AlertmanagerConfig CrdKind
+	KindsString    string
+	Prometheus     CrdKind
+	Alertmanager   CrdKind
+	ServiceMonitor CrdKind
+	PrometheusRule CrdKind
 }
 
 var DefaultCrdKinds = CrdKinds{
-	KindsString:        "",
-	Prometheus:         CrdKind{Plural: PrometheusName, Kind: PrometheusesKind, SpecName: "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.Prometheus"},
-	ServiceMonitor:     CrdKind{Plural: ServiceMonitorName, Kind: ServiceMonitorsKind, SpecName: "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.ServiceMonitor"},
-	Alertmanager:       CrdKind{Plural: AlertmanagerName, Kind: AlertmanagersKind, SpecName: "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.Alertmanager"},
-	PrometheusRule:     CrdKind{Plural: PrometheusRuleName, Kind: PrometheusRuleKind, SpecName: "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.PrometheusRule"},
-	AlertmanagerConfig: CrdKind{Plural: AlertmanagerConfigName, Kind: AlertmanagerConfigKind, SpecName: "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.AlertmanagerConfig"},
+	KindsString:    "",
+	Prometheus:     CrdKind{Plural: PrometheusName, Kind: PrometheusesKind, SpecName: "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.Prometheus"},
+	ServiceMonitor: CrdKind{Plural: ServiceMonitorName, Kind: ServiceMonitorsKind, SpecName: "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.ServiceMonitor"},
+	Alertmanager:   CrdKind{Plural: AlertmanagerName, Kind: AlertmanagersKind, SpecName: "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.Alertmanager"},
+	PrometheusRule: CrdKind{Plural: PrometheusRuleName, Kind: PrometheusRuleKind, SpecName: "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1.PrometheusRule"},
 }
 
 // Implement the flag.Value interface
@@ -52,12 +50,11 @@ func (crdkinds *CrdKinds) String() string {
 func (crdkinds *CrdKinds) Set(value string) error {
 	*crdkinds = DefaultCrdKinds
 	if value == "" {
-		value = fmt.Sprintf("%s=%s:%s,%s=%s:%s,%s=%s:%s,%s=%s:%s,%s=%s:%s",
+		value = fmt.Sprintf("%s=%s:%s,%s=%s:%s,%s=%s:%s,%s=%s:%s",
 			PrometheusKindKey, PrometheusesKind, PrometheusName,
 			AlertManagerKindKey, AlertmanagersKind, AlertmanagerName,
 			ServiceMonitorKindKey, ServiceMonitorsKind, ServiceMonitorName,
 			PrometheusRuleKindKey, PrometheusRuleKind, PrometheusRuleName,
-			AlertmanagerConfigKindKey, AlertmanagerConfigKind, AlertmanagerConfigName,
 		)
 	}
 	splited := strings.Split(value, ",")
@@ -74,8 +71,6 @@ func (crdkinds *CrdKinds) Set(value string) error {
 			(*crdkinds).Alertmanager = crdKind
 		case PrometheusRuleKindKey:
 			(*crdkinds).PrometheusRule = crdKind
-		case AlertmanagerConfigKindKey:
-			(*crdkinds).AlertmanagerConfig = crdKind
 		default:
 			fmt.Printf("Warning: unknown kind: %s... ignoring", kindKey)
 		}

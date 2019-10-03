@@ -39,10 +39,6 @@ const (
 	PrometheusRuleKind    = "PrometheusRule"
 	PrometheusRuleName    = "prometheusrules"
 	PrometheusRuleKindKey = "prometheusrule"
-
-	AlertmanagerConfigKind    = "AlertmanagerConfig"
-	AlertmanagerConfigName    = "alertmanagerconfigs"
-	AlertmanagerConfigKindKey = "alertmanagerconfig"
 )
 
 // Prometheus defines a Prometheus deployment.
@@ -669,44 +665,6 @@ type Rule struct {
 	Annotations map[string]string  `json:"annotations,omitempty"`
 }
 
-// AlertmanagerConfigList is a list of AlertmanagerConfig.
-// +k8s:openapi-gen=true
-type AlertmanagerConfigList struct {
-	metav1.TypeMeta `json:",inline"`
-	// Standard list metadata
-	// More info: http://releases.k8s.io/HEAD/docs/devel/api-conventions.md#metadata
-	metav1.ListMeta `json:"metadata,omitempty"`
-	// List of Rules
-	Items []*AlertmanagerConfig `json:"items"`
-}
-
-// AlertmanagerConfig defines config for a Alertmanager instance
-// +genclient
-// +k8s:openapi-gen=true
-type AlertmanagerConfig struct {
-	metav1.TypeMeta `json:",inline"`
-	// Standard object’s metadata. More info:
-	// http://releases.k8s.io/HEAD/docs/devel/api-conventions.md#metadata
-	metav1.ObjectMeta `json:"metadata,omitempty"`
-	// Specification of desired alerting rule definitions for Prometheus.
-	Spec AlertmanagerConfigSpec `json:"spec"`
-}
-
-// AlertmanagerConfigSpec contains specification parameters for Alerting config.
-// +k8s:openapi-gen=true
-type AlertmanagerConfigSpec struct {
-	// Content of Alert Manger receiver config
-	Type   string  `json:"type"`
-	Params []Param `json:"params,omitempty"`
-}
-
-// Param is a list of alerting receivers.
-// +k8s:openapi-gen=true
-type Param struct {
-	Name  string `json:"name"`
-	Value string `json:"value"`
-}
-
 // Alertmanager describes an Alertmanager cluster.
 // +genclient
 // +k8s:openapi-gen=true
@@ -916,15 +874,5 @@ func (f *PrometheusRule) DeepCopyObject() runtime.Object {
 
 // DeepCopyObject implements the runtime.Object interface.
 func (l *PrometheusRuleList) DeepCopyObject() runtime.Object {
-	return l.DeepCopy()
-}
-
-// DeepCopyObject implements the runtime.Object interface.
-func (f *AlertmanagerConfig) DeepCopyObject() runtime.Object {
-	return f.DeepCopy()
-}
-
-// DeepCopyObject implements the runtime.Object interface.
-func (l *AlertmanagerConfigList) DeepCopyObject() runtime.Object {
 	return l.DeepCopy()
 }
