@@ -21,6 +21,7 @@ import (
 	"io/ioutil"
 	"os"
 	"path"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -31,6 +32,9 @@ import (
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
+
+	jsonenc "encoding/json"
+
 	appsv1 "k8s.io/api/apps/v1"
 	apiv1 "k8s.io/api/core/v1"
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
@@ -79,6 +83,11 @@ type InitConfig struct {
 	mClient   monitoringclient.Interface
 	crdclient clientset.Interface
 	sysCfg    *SystemPrometheusConfig
+}
+
+// PromRules stores all default system prometheus rules
+type PromRules struct {
+	ruleGroup []monitoringv1.RuleGroup
 }
 
 // New returns new instance of InitConfig
@@ -192,12 +201,48 @@ func getByKubeCfg() (*InitConfig, error) {
 	return buildInitConfig(cfg)
 }
 
+func (p *PromRules) walkApps(path string, f os.FileInfo, err error) error {
+	if f == nil {
+		return fmt.Errorf("FileInfo %s is nil  Error : %s", path, err)
+	}
+
+	if f.IsDir() || !strings.Contains(f.Name(), "json") {
+		return nil
+	}
+	log.Debugf("Listing rule file: %s", f.Name())
+
+	data, err := ioutil.ReadFile(path)
+	if err != nil {
+		log.Error("Failed to read file", err)
+		return err
+	}
+	var ruleGroup monitoringv1.RuleGroup
+	err = jsonenc.Unmarshal(data, &ruleGroup)
+	if err != nil {
+		log.Error("Failed to unmarshal rule json ", err)
+		return err
+	}
+
+	p.ruleGroup = append(p.ruleGroup, ruleGroup)
+
+	return nil
+}
+
+func (p *PromRules) walkDir() error {
+	if err := filepath.Walk(configDir+"/rules", p.walkApps); err != nil {
+		return err
+	}
+
+	return nil
+}
+
 // SetupSystemPrometheus deployment on a new PMK cluster
 func SetupSystemPrometheus() error {
 	syspc, err := new()
 	if err != nil {
 		log.Error(err, "when starting system prometheus controller")
 	}
+
 	if err := waitForCRD(syspc); err != nil {
 		log.Error(err, "while waiting for CRD's to come up")
 	}
@@ -348,6 +393,13 @@ func createPrometheusRules(w *InitConfig) error {
 		return err
 	}
 
+	p := &PromRules{}
+	p.walkDir()
+
+	for _, rule := range p.ruleGroup {
+		log.Debugf("Found rule: %s", rule.Name)
+	}
+
 	// Create Prometheus Rules
 	prometheusClient := promclientset.PrometheusRules(monitoringNS)
 	promObject := &monitoringv1.PrometheusRule{
@@ -360,58 +412,7 @@ func createPrometheusRules(w *InitConfig) error {
 			},
 		},
 		Spec: monitoringv1.PrometheusRuleSpec{
-			Groups: []monitoringv1.RuleGroup{
-				monitoringv1.RuleGroup{
-					Name: "system-rule-group",
-					Rules: []monitoringv1.Rule{
-						monitoringv1.Rule{ // Main memory less than 90% available
-							Alert: "OutofMemory",
-							Expr:  intstr.FromString("(node_memory_MemFree_bytes + node_memory_Cached_bytes + node_memory_Buffers_bytes) / node_memory_MemTotal_bytes * 100 < 90"),
-							For:   "5m",
-						},
-						monitoringv1.Rule{ // Receiving data on network > 100 mb/s
-							Alert: "UnusualNetworkThroughputIn",
-							Expr:  intstr.FromString("sum by (instance) (irate(node_network_receive_bytes_total[2m])) / 1024 / 1024 > 100"),
-							For:   "5m",
-						},
-						monitoringv1.Rule{ // Sending data on network > 100 mb/s
-							Alert: "UnusualNetworkThroughputOut",
-							Expr:  intstr.FromString("sum by (instance) (irate(node_network_transmit_bytes_total[2m])) / 1024 / 1024 > 100"),
-							For:   "5m",
-						},
-						monitoringv1.Rule{ // Disk reading too much data > 50 mb/s
-							Alert: "UnusualDiskReadRate",
-							Expr:  intstr.FromString("sum by (instance) (irate(node_disk_read_bytes_total[2m])) / 1024 / 1024 > 50"),
-							For:   "5m",
-						},
-						monitoringv1.Rule{ // Disk writing much data 50 mb/s
-							Alert: "UnusualDiskWriteRate",
-							Expr:  intstr.FromString("sum by (instance) (irate(node_disk_written_bytes_total[2m])) / 1024 / 1024 > 50"),
-							For:   "5m",
-						},
-						monitoringv1.Rule{ // Very high disk read latency > 100 ms
-							Alert: "UnusualDiskReadLatency",
-							Expr:  intstr.FromString("rate(node_disk_read_time_seconds_total[1m]) / rate(node_disk_reads_completed_total[1m]) > 100"),
-							For:   "5m",
-						},
-						monitoringv1.Rule{ // Very high disk write latency > 100 ms
-							Alert: "UnusualDiskWriteLatency",
-							Expr:  intstr.FromString("rate(node_disk_write_time_seconds_total[1m]) / rate(node_disk_writes_completed_total[1m]) > 100"),
-							For:   "5m",
-						},
-						monitoringv1.Rule{ // High CPU load > 80%
-							Alert: "HighCpuLoad",
-							Expr:  intstr.FromString("100 - (avg by(instance) (irate(node_cpu_seconds_total{mode=\"idle\"}[5m])) * 100) > 80"),
-							For:   "5m",
-						},
-						monitoringv1.Rule{ // Swap is filling up > 80%
-							Alert: "SwapIsFillingUp",
-							Expr:  intstr.FromString("(1 - (node_memory_SwapFree_bytes / node_memory_SwapTotal_bytes)) * 100 > 80"),
-							For:   "5m",
-						},
-					},
-				},
-			},
+			Groups: p.ruleGroup,
 		},
 	}
 

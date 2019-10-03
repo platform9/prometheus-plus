@@ -1,0 +1,17 @@
+  {
+    "name": "kubernetes-system",
+    "rules": [
+      {
+        "alert": "KubeNodeNotReady",
+        "annotations": {
+          "message": "{{ $labels.node }} has been unready for more than an hour.",
+          "runbook_url": "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubenodenotready"
+        },
+        "expr": "kube_node_status_condition{job=\"kube-state-metrics\",condition=\"Ready\",status=\"true\"} == 0\n",
+        "for": "15m",
+        "labels": {
+          "severity": "warning"
+        }
+      }
+    ]
+  }
