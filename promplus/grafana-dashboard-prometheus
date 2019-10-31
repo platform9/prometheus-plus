@@ -13,7 +13,7 @@
         ]
     },
     "description": "Prometheus for system metrics",
-    "editable": true,
+    "editable": false,
     "gnetId": 159,
     "graphTooltip": 1,
     "id": null,

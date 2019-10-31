@@ -22,10 +22,9 @@ binary: ${build_dir}
 	${go_cmd} build -o ${bin_dir}/${prog_name} ${pkg}
 
 test:
-	${go_cmd} test ./pkg/...
+	go test ./pkg/...
 
 image: go_cmd = GOOS=linux GOARCH=amd64 go
-
-image: test binary
+image: binary
 	docker build -t ${repo}/${image_name} .
 
