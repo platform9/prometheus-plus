@@ -862,7 +862,7 @@
       ],
       "targets": [
         {
-          "expr": "kube_deployment_status_replicas{namespace=~\"$namespace\"}",
+          "expr": "kube_deployment_status_replicas{exported_namespace=~\"$namespace\"}",
           "format": "time_series",
           "instant": true,
           "interval": "",
@@ -937,7 +937,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_deployment_status_replicas{namespace=~\"$namespace\"})",
+          "expr": "sum(kube_deployment_status_replicas{exported_namespace=~\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -1018,7 +1018,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_deployment_status_replicas_updated{namespace=~\"$namespace\"})",
+          "expr": "sum(kube_deployment_status_replicas_updated{exported_namespace=~\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -1099,7 +1099,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_deployment_status_replicas_unavailable{namespace=~\"$namespace\"})",
+          "expr": "sum(kube_deployment_status_replicas_unavailable{exported_namespace=~\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -1275,7 +1275,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_node_status_condition{condition=\"OutOfDisk\", node=~\"$node\", status=\"true\"})",
+          "expr": "sum(kube_node_status_condition{condition=\"DiskPressure\", node=~\"$node\", status=\"true\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -1451,7 +1451,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_pod_status_phase{namespace=~\"$namespace\", phase=\"Running\"})",
+          "expr": "sum(kube_pod_status_phase{exported_namespace=~\"$namespace\", phase=\"Running\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -1533,7 +1533,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_pod_status_phase{namespace=~\"$namespace\", phase=\"Pending\"})",
+          "expr": "sum(kube_pod_status_phase{exported_namespace=~\"$namespace\", phase=\"Pending\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -1615,7 +1615,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_pod_status_phase{namespace=~\"$namespace\", phase=\"Failed\"})",
+          "expr": "sum(kube_pod_status_phase{exported_namespace=~\"$namespace\", phase=\"Failed\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -1697,7 +1697,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_pod_status_phase{namespace=~\"$namespace\", phase=\"Succeeded\"})",
+          "expr": "sum(kube_pod_status_phase{exported_namespace=~\"$namespace\", phase=\"Succeeded\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -1779,7 +1779,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_pod_status_phase{namespace=~\"$namespace\", phase=\"Unknown\"})",
+          "expr": "sum(kube_pod_status_phase{exported_namespace=~\"$namespace\", phase=\"Unknown\"})",
           "format": "time_series",
           "interval": "",
           "intervalFactor": 1,
@@ -1875,7 +1875,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_pod_container_status_running{namespace=~\"$namespace\"})",
+          "expr": "sum(kube_pod_container_status_running{exported_namespace=~\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -1956,7 +1956,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_pod_container_status_waiting{namespace=~\"$namespace\"})",
+          "expr": "sum(kube_pod_container_status_waiting{exported_namespace=~\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -2037,7 +2037,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_pod_container_status_terminated{namespace=~\"$namespace\"})",
+          "expr": "sum(kube_pod_container_status_terminated{exported_namespace=~\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -2118,7 +2118,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(delta(kube_pod_container_status_restarts{namespace=\"kube-system\"}[30m]))",
+          "expr": "sum(delta(kube_pod_container_status_restarts_total{exported_namespace=\"$namespace\"}[30m]))",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -2199,7 +2199,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_pod_container_resource_requests_cpu_cores{namespace=~\"$namespace\", node=~\"$node\"})",
+          "expr": "sum(kube_pod_container_resource_requests_cpu_cores{exported_namespace=~\"$namespace\", node=~\"$node\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -2280,7 +2280,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_pod_container_resource_requests_memory_bytes{namespace=~\"$namespace\", node=~\"$node\"})",
+          "expr": "sum(kube_pod_container_resource_requests_memory_bytes{exported_namespace=~\"$namespace\", node=~\"$node\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -2375,7 +2375,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_job_status_succeeded{namespace=~\"$namespace\"})",
+          "expr": "sum(kube_job_status_succeeded{exported_namespace=~\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -2456,14 +2456,14 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_job_status_active{namespace=~\"$namespace\"})",
+          "expr": "sum(kube_job_status_active{exported_namespace=~\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
         }
       ],
       "thresholds": "",
-      "title": "Jobs Succeeded",
+      "title": "Jobs Active",
       "type": "singlestat",
       "valueFontSize": "80%",
       "valueMaps": [
@@ -2537,7 +2537,7 @@
       "tableColumn": "",
       "targets": [
         {
-          "expr": "sum(kube_job_status_failed{namespace=~\"$namespace\"})",
+          "expr": "sum(kube_job_status_failed{exported_namespace=~\"$namespace\"})",
           "format": "time_series",
           "intervalFactor": 1,
           "refId": "A"
@@ -2566,23 +2566,6 @@
   ],
   "templating": {
     "list": [
-      {
-        "current": {
-          "text": "No data sources found",
-          "value": ""
-        },
-        "hide": 0,
-        "includeAll": false,
-        "label": null,
-        "multi": false,
-        "name": "cluster",
-        "options": [],
-        "query": "grafana-kubernetes-datasource",
-        "refresh": 1,
-        "regex": "",
-        "skipUrlSync": false,
-        "type": "datasource"
-      },
       {
         "allValue": null,
         "current": {},
@@ -2630,7 +2613,7 @@
         "multi": true,
         "name": "node",
         "options": [],
-        "query": "node",
+        "query": "label_values(kube_node_info, node)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
@@ -2652,7 +2635,7 @@
         "multi": true,
         "name": "namespace",
         "options": [],
-        "query": "namespace",
+        "query": "label_values(kube_pod_info, exported_namespace)",
         "refresh": 1,
         "regex": "",
         "skipUrlSync": false,
