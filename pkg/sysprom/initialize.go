@@ -550,6 +550,143 @@ func createAlertManager(w *InitConfig) error {
 	return nil
 }
 
+func getDashboards(configDir string) ([]string, error) {
+	// Walk config dir and create configmaps for each dashboard.
+	configFiles := make([]string, 0)
+	if err := filepath.Walk(configDir, func(path string, f os.FileInfo, err error) error {
+		fName := strings.ToLower(f.Name())
+		if !strings.HasPrefix(fName, "grafana-dashboard-") {
+			log.Infof("Skipping %s, not a dashboard", fName)
+			return nil
+		}
+		log.Infof("Treating %s as dashboard", fName)
+		configFiles = append(configFiles, fName)
+
+		return nil
+	}); err != nil {
+		return []string{}, err
+	}
+
+	return configFiles, nil
+}
+
+func getVolumeMounts(dashboards []string) []apiv1.VolumeMount {
+	volumeMounts := []apiv1.VolumeMount{
+		{
+			Name:      "grafana-conf",
+			MountPath: "/etc/grafana",
+			ReadOnly:  true,
+		},
+		{
+			Name:      "grafana-storage",
+			MountPath: "/var/lib/grafana",
+			ReadOnly:  false,
+		},
+		{
+			Name:      "grafana-datasources",
+			MountPath: "/etc/grafana/provisioning/datasources",
+			ReadOnly:  false,
+		},
+		{
+			Name:      "grafana-dashboards",
+			MountPath: "/etc/grafana/provisioning/dashboards",
+			ReadOnly:  false,
+		},
+	}
+
+	for i, d := range dashboards {
+		volumeMounts = append(volumeMounts, apiv1.VolumeMount{
+			Name:      d,
+			MountPath: fmt.Sprintf("/grafana-dashboard-definitions/%d/%s", i, d),
+			ReadOnly:  false,
+		})
+	}
+
+	return volumeMounts
+}
+
+func getVolumes(dashboards []string) []apiv1.Volume {
+	volumes := []apiv1.Volume{
+		{
+			Name: "grafana-storage",
+			VolumeSource: apiv1.VolumeSource{
+				EmptyDir: &apiv1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: "log",
+			VolumeSource: apiv1.VolumeSource{
+				EmptyDir: &apiv1.EmptyDirVolumeSource{},
+			},
+		},
+		{
+			Name: "grafana-datasources",
+			VolumeSource: apiv1.VolumeSource{
+				Secret: &apiv1.SecretVolumeSource{
+					SecretName: "grafana-datasources",
+				},
+			},
+		},
+		{
+			Name: "nginx-conf",
+			VolumeSource: apiv1.VolumeSource{
+				ConfigMap: &apiv1.ConfigMapVolumeSource{
+					LocalObjectReference: apiv1.LocalObjectReference{
+						Name: "nginx-conf",
+					},
+					Items: []apiv1.KeyToPath{
+						{
+							Key:  "nginx.conf",
+							Path: "nginx.conf",
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: "grafana-conf",
+			VolumeSource: apiv1.VolumeSource{
+				ConfigMap: &apiv1.ConfigMapVolumeSource{
+					LocalObjectReference: apiv1.LocalObjectReference{
+						Name: "grafana-conf",
+					},
+					Items: []apiv1.KeyToPath{
+						{
+							Key:  "grafana.ini",
+							Path: "grafana.ini",
+						},
+					},
+				},
+			},
+		},
+		{
+			Name: "grafana-dashboards",
+			VolumeSource: apiv1.VolumeSource{
+				ConfigMap: &apiv1.ConfigMapVolumeSource{
+					LocalObjectReference: apiv1.LocalObjectReference{
+						Name: "grafana-dashboards",
+					},
+				},
+			},
+		},
+	}
+
+	for _, d := range dashboards {
+		volumes = append(volumes, apiv1.Volume{
+			Name: d,
+			VolumeSource: apiv1.VolumeSource{
+				ConfigMap: &apiv1.ConfigMapVolumeSource{
+					LocalObjectReference: apiv1.LocalObjectReference{
+						Name: d,
+					},
+				},
+			},
+		})
+	}
+
+	return volumes
+}
+
 func createGrafana(w *InitConfig) error {
 	var replicas int32
 	replicas = 1
@@ -579,16 +716,17 @@ func createGrafana(w *InitConfig) error {
 		return err
 	}
 
-	// Create configmap for adding prometheus dashboard definition in Grafana
-	err = createConfigMap(w, "grafana-dashboard-prometheus", monitoringNS, "prometheus.json", configDir+"/grafana-dashboard-prometheus")
+	dashboards, err := getDashboards(configDir)
 	if err != nil {
 		return err
 	}
 
-	// Create configmap for adding node-exporter dashboard definition in Grafana
-	err = createConfigMap(w, "grafana-dashboard-node-exporter", monitoringNS, "node-exporter.json", configDir+"/grafana-dashboard-node-exporter")
-	if err != nil {
-		return err
+	// Configmaps for dashboards
+	for _, cfgFile := range dashboards {
+		log.Infof("Creating configmap for %s", cfgFile)
+		if err := createConfigMap(w, cfgFile, monitoringNS, cfgFile+".json", configDir+"/"+cfgFile); err != nil {
+			return err
+		}
 	}
 
 	// Create configmap for adding nginx configs in Grafana
@@ -669,128 +807,15 @@ func createGrafana(w *InitConfig) error {
 									"memory": mem,
 								},
 							},
-							VolumeMounts: []apiv1.VolumeMount{
-								{
-									Name:      "grafana-conf",
-									MountPath: "/etc/grafana",
-									ReadOnly:  true,
-								},
-								{
-									Name:      "grafana-storage",
-									MountPath: "/var/lib/grafana",
-									ReadOnly:  false,
-								},
-								{
-									Name:      "grafana-datasources",
-									MountPath: "/etc/grafana/provisioning/datasources",
-									ReadOnly:  false,
-								},
-								{
-									Name:      "grafana-dashboards",
-									MountPath: "/etc/grafana/provisioning/dashboards",
-									ReadOnly:  false,
-								},
-								{
-									Name:      "grafana-dashboard-prometheus",
-									MountPath: "/grafana-dashboard-definitions/0/prometheus",
-									ReadOnly:  false,
-								},
-								{
-									Name:      "grafana-dashboard-node-exporter",
-									MountPath: "/grafana-dashboard-definitions/1/node-exporter",
-									ReadOnly:  false,
-								},
-							},
+							VolumeMounts: getVolumeMounts(dashboards),
 						},
 					},
-					Volumes: []apiv1.Volume{
-						{
-							Name: "grafana-storage",
-							VolumeSource: apiv1.VolumeSource{
-								EmptyDir: &apiv1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: "log",
-							VolumeSource: apiv1.VolumeSource{
-								EmptyDir: &apiv1.EmptyDirVolumeSource{},
-							},
-						},
-						{
-							Name: "grafana-datasources",
-							VolumeSource: apiv1.VolumeSource{
-								Secret: &apiv1.SecretVolumeSource{
-									SecretName: "grafana-datasources",
-								},
-							},
-						},
-						{
-							Name: "nginx-conf",
-							VolumeSource: apiv1.VolumeSource{
-								ConfigMap: &apiv1.ConfigMapVolumeSource{
-									LocalObjectReference: apiv1.LocalObjectReference{
-										Name: "nginx-conf",
-									},
-									Items: []apiv1.KeyToPath{
-										{
-											Key:  "nginx.conf",
-											Path: "nginx.conf",
-										},
-									},
-								},
-							},
-						},
-						{
-							Name: "grafana-conf",
-							VolumeSource: apiv1.VolumeSource{
-								ConfigMap: &apiv1.ConfigMapVolumeSource{
-									LocalObjectReference: apiv1.LocalObjectReference{
-										Name: "grafana-conf",
-									},
-									Items: []apiv1.KeyToPath{
-										{
-											Key:  "grafana.ini",
-											Path: "grafana.ini",
-										},
-									},
-								},
-							},
-						},
-						{
-							Name: "grafana-dashboards",
-							VolumeSource: apiv1.VolumeSource{
-								ConfigMap: &apiv1.ConfigMapVolumeSource{
-									LocalObjectReference: apiv1.LocalObjectReference{
-										Name: "grafana-dashboards",
-									},
-								},
-							},
-						},
-						{
-							Name: "grafana-dashboard-prometheus",
-							VolumeSource: apiv1.VolumeSource{
-								ConfigMap: &apiv1.ConfigMapVolumeSource{
-									LocalObjectReference: apiv1.LocalObjectReference{
-										Name: "grafana-dashboard-prometheus",
-									},
-								},
-							},
-						},
-						{
-							Name: "grafana-dashboard-node-exporter",
-							VolumeSource: apiv1.VolumeSource{
-								ConfigMap: &apiv1.ConfigMapVolumeSource{
-									LocalObjectReference: apiv1.LocalObjectReference{
-										Name: "grafana-dashboard-node-exporter",
-									},
-								},
-							},
-						},
-					},
+					Volumes: getVolumes(dashboards),
 				},
 			},
 		},
 	}
+
 	_, err = deploymentClient.Create(deployment)
 	if err != nil {
 		return err
