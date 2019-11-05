@@ -12,7 +12,6 @@
       }
     ]
   },
-  "description": "Summary metrics about containers running on Kubernetes nodes.",
   "editable": false,
   "gnetId": null,
   "graphTooltip": 1,
@@ -2560,10 +2559,7 @@
   "refresh": "30s",
   "schemaVersion": 20,
   "style": "dark",
-  "tags": [
-    "kubernetes",
-    "kubernetes-app"
-  ],
+  "tags": [],
   "templating": {
     "list": [
       {
@@ -2678,7 +2674,5 @@
     ]
   },
   "timezone": "browser",
-  "title": "K8s Cluster",
-  "uid": "",
-  "version": 1
+  "title": "Kubernetes"
 }

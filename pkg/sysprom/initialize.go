@@ -51,6 +51,7 @@ const (
 	alertmanagerPort = 9093
 	monitoringNS     = "pf9-monitoring"
 	configDir        = "/etc/promplus"
+	defaultDashboard = "grafana-dashboard-kubernetes"
 )
 
 //SystemPrometheusConfig stores system prometheus configuration
@@ -242,7 +243,6 @@ func SetupSystemPrometheus() error {
 	if err != nil {
 		log.Error(err, "when starting system prometheus controller")
 	}
-
 	if err := waitForCRD(syspc); err != nil {
 		log.Error(err, "while waiting for CRD's to come up")
 	}
@@ -595,6 +595,15 @@ func getVolumeMounts(dashboards []string) []apiv1.VolumeMount {
 	}
 
 	for i, d := range dashboards {
+		if d == defaultDashboard {
+			volumeMounts = append(volumeMounts, apiv1.VolumeMount{
+				Name:      d,
+				MountPath: "/usr/share/grafana/public/dashboards/home.json",
+				SubPath:   "home.json",
+				ReadOnly:  false,
+			})
+			continue
+		}
 		volumeMounts = append(volumeMounts, apiv1.VolumeMount{
 			Name:      d,
 			MountPath: fmt.Sprintf("/grafana-dashboard-definitions/%d/%s", i, d),
@@ -724,6 +733,12 @@ func createGrafana(w *InitConfig) error {
 	// Configmaps for dashboards
 	for _, cfgFile := range dashboards {
 		log.Infof("Creating configmap for %s", cfgFile)
+		if cfgFile == defaultDashboard {
+			if err := createConfigMap(w, cfgFile, monitoringNS, "home.json", configDir+"/"+cfgFile); err != nil {
+				return err
+			}
+			continue
+		}
 		if err := createConfigMap(w, cfgFile, monitoringNS, cfgFile+".json", configDir+"/"+cfgFile); err != nil {
 			return err
 		}

@@ -20999,7 +20999,5 @@
     ]
   },
   "timezone": "browser",
-  "title": "Node Exporter",
-  "uid": "",
-  "version": 0
+  "title": "Node Exporter"
 }
