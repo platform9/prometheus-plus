@@ -51,7 +51,7 @@ const (
 	alertmanagerPort = 9093
 	monitoringNS     = "pf9-monitoring"
 	configDir        = "/etc/promplus"
-	defaultDashboard = "grafana-dashboard-kubernetes"
+	defaultDashboard = "grafana-dashboard-cluster-explorer"
 )
 
 //SystemPrometheusConfig stores system prometheus configuration
