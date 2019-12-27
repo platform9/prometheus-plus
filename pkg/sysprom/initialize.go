@@ -51,12 +51,12 @@ const (
 	alertmanagerPort = 9093
 	monitoringNS     = "pf9-monitoring"
 	operatorsNS      = "pf9-operators"
-	configDir        = "/etc/promplus"
 	defaultDashboard = "grafana-dashboard-cluster-explorer"
 )
 
 //SystemPrometheusConfig stores system prometheus configuration
 type SystemPrometheusConfig struct {
+	configDir               string
 	grafanaCPUResource      string
 	grafanaMemResource      string
 	prometheusCPUResource   string
@@ -118,6 +118,8 @@ func getEnv(env, def string) string {
 
 func getSystemPrometheusEnv() (systemcfg *SystemPrometheusConfig) {
 	var syscfg SystemPrometheusConfig
+	syscfg.configDir = getEnv("CONFIG_DIR", "/etc/promplus")
+
 	waitPeriod := getEnv("CRD_WAIT_TIME_MIN", "10")
 	syscfg.crdWaitTime, _ = strconv.Atoi(waitPeriod)
 
@@ -234,8 +236,8 @@ func (p *PromRules) walkApps(path string, f os.FileInfo, err error) error {
 	return nil
 }
 
-func (p *PromRules) walkDir() error {
-	if err := filepath.Walk(configDir+"/rules", p.walkApps); err != nil {
+func (p *PromRules) walkDir(w *InitConfig) error {
+	if err := filepath.Walk(w.sysCfg.configDir+"/rules", p.walkApps); err != nil {
 		return err
 	}
 
@@ -408,7 +410,7 @@ func (w *InitConfig) createPrometheus() error {
 
 func (w *InitConfig) createPrometheusRules() error {
 	p := &PromRules{}
-	p.walkDir()
+	p.walkDir(w)
 
 	for _, rule := range p.ruleGroup {
 		log.Debugf("Found rule: %s", rule.Name)
@@ -493,7 +495,7 @@ func (w *InitConfig) createAlertManager() error {
 	cpu, _ := resource.ParseQuantity(w.sysCfg.alertmanagerCPUResource)
 	mem, _ := resource.ParseQuantity(w.sysCfg.alertmanagerMemResource)
 
-	file, err := os.Open(configDir + "/alertmanager.yaml")
+	file, err := os.Open(w.sysCfg.configDir + "/alertmanager.yaml")
 	if err != nil {
 		return err
 	}
@@ -572,10 +574,10 @@ func getDashboards(configDir string) ([]string, error) {
 	if err := filepath.Walk(configDir, func(path string, f os.FileInfo, err error) error {
 		fName := strings.ToLower(f.Name())
 		if !strings.HasPrefix(fName, "grafana-dashboard-") {
-			log.Infof("Skipping %s, not a dashboard", fName)
+			log.Debugf("Skipping %s, not a dashboard", fName)
 			return nil
 		}
-		log.Infof("Treating %s as dashboard", fName)
+		log.Debugf("Treating %s as dashboard", fName)
 		configFiles = append(configFiles, fName)
 
 		return nil
@@ -720,7 +722,7 @@ func (w *InitConfig) createGrafana() error {
 	mem, _ := resource.ParseQuantity(w.sysCfg.grafanaMemResource)
 
 	// Create Secret for Grafana
-	file, err := os.Open(configDir + "/grafana-datasources")
+	file, err := os.Open(w.sysCfg.configDir + "/grafana-datasources")
 	if err != nil {
 		return err
 	}
@@ -736,38 +738,38 @@ func (w *InitConfig) createGrafana() error {
 	}
 
 	// Create configmap for adding dashboard in Grafana
-	err = createConfigMap(w, "grafana-dashboards", monitoringNS, "dashboards.yaml", configDir+"/grafana-dashboards")
+	err = createConfigMap(w, "grafana-dashboards", monitoringNS, "dashboards.yaml", w.sysCfg.configDir+"/grafana-dashboards")
 	if err != nil {
 		return err
 	}
 
-	dashboards, err := getDashboards(configDir)
+	dashboards, err := getDashboards(w.sysCfg.configDir)
 	if err != nil {
 		return err
 	}
 
 	// Configmaps for dashboards
 	for _, cfgFile := range dashboards {
-		log.Infof("Creating configmap for %s", cfgFile)
+		log.Debugf("Creating configmap for %s", cfgFile)
 		if cfgFile == defaultDashboard {
-			if err := createConfigMap(w, cfgFile, monitoringNS, "home.json", configDir+"/"+cfgFile); err != nil {
+			if err := createConfigMap(w, cfgFile, monitoringNS, "home.json", w.sysCfg.configDir+"/"+cfgFile); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := createConfigMap(w, cfgFile, monitoringNS, cfgFile+".json", configDir+"/"+cfgFile); err != nil {
+		if err := createConfigMap(w, cfgFile, monitoringNS, cfgFile+".json", w.sysCfg.configDir+"/"+cfgFile); err != nil {
 			return err
 		}
 	}
 
 	// Create configmap for adding nginx configs in Grafana
-	err = createConfigMap(w, "nginx-conf", monitoringNS, "nginx.conf", configDir+"/nginx-config")
+	err = createConfigMap(w, "nginx-conf", monitoringNS, "nginx.conf", w.sysCfg.configDir+"/nginx-config")
 	if err != nil {
 		return err
 	}
 
 	// Create configmap for adding grafana configs
-	err = createConfigMap(w, "grafana-conf", monitoringNS, "grafana.ini", configDir+"/grafana-config")
+	err = createConfigMap(w, "grafana-conf", monitoringNS, "grafana.ini", w.sysCfg.configDir+"/grafana-config")
 	if err != nil {
 		return err
 	}

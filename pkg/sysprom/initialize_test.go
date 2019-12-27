@@ -1,57 +1,67 @@
 package sysprom
 
 import (
-	"flag"
-	"reflect"
+	"os"
 	"testing"
 
-	"github.com/spf13/viper"
+	monitoringclient "github.com/coreos/prometheus-operator/pkg/client/versioned/fake"
 	"github.com/stretchr/testify/assert"
+	appsv1 "k8s.io/api/apps/v1"
+	"k8s.io/client-go/kubernetes/fake"
+	"k8s.io/client-go/kubernetes/scheme"
+	"k8s.io/client-go/rest"
 )
 
 func init() {
-	viper.Set("mode", flag.String("mode", "standalone", "kubernetes configuration mode"))
+	os.Setenv("CONFIG_DIR", "../../promplus")
 }
 
-func TestNewConfig(t *testing.T) {
-	config := getConfig(t)
-	assert.Equal(t, reflect.TypeOf(config), reflect.TypeOf(&InitConfig{}))
+func getNewConfig() (*InitConfig, error) {
+	cfg := &rest.Config{
+		APIPath: "/apis",
+		ContentConfig: rest.ContentConfig{
+			NegotiatedSerializer: scheme.Codecs,
+			GroupVersion:         &appsv1.SchemeGroupVersion,
+		},
+	}
+
+	client := fake.NewSimpleClientset()
+	mclient := monitoringclient.NewSimpleClientset()
+
+	return &InitConfig{
+		cfg:     cfg,
+		client:  client,
+		mClient: mclient,
+		sysCfg:  getSystemPrometheusEnv(),
+	}, nil
 }
 
 func TestPrometheus(t *testing.T) {
-	config := getConfig(t)
-	err := createPrometheus(config)
+	syspc, _ := getNewConfig()
+	err := syspc.createPrometheus()
 	assert.Equal(t, nil, err)
 }
 
 func TestPrometheusRules(t *testing.T) {
-	config := getConfig(t)
-	err := createPrometheusRules(config)
+	syspc, _ := getNewConfig()
+	err := syspc.createPrometheusRules()
 	assert.Equal(t, nil, err)
 }
 
 func TestServiceMonitor(t *testing.T) {
-	config := getConfig(t)
-	err := createServiceMonitor(config)
+	syspc, _ := getNewConfig()
+	err := syspc.createServiceMonitor()
 	assert.Equal(t, nil, err)
 }
 
 func TestAlertManager(t *testing.T) {
-	config := getConfig(t)
-	err := createAlertManager(config)
+	syspc, _ := getNewConfig()
+	err := syspc.createAlertManager()
 	assert.Equal(t, nil, err)
 }
 
 func TestGrafana(t *testing.T) {
-	config := getConfig(t)
-	err := createGrafana(config)
+	syspc, _ := getNewConfig()
+	err := syspc.createGrafana()
 	assert.Equal(t, nil, err)
-}
-
-func getConfig(t *testing.T) *InitConfig {
-	config, err := new()
-	if err != nil {
-		t.Fatalf("Error occured while getting kubernetes config. Error is: %s", err.Error())
-	}
-	return config
 }
