@@ -28,7 +28,6 @@ import (
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	monitoringclient "github.com/coreos/prometheus-operator/pkg/client/versioned"
-	prometheus "github.com/coreos/prometheus-operator/pkg/client/versioned/typed/monitoring/v1"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -327,13 +326,8 @@ func (w *InitConfig) createPrometheus() error {
 	cpu, _ := resource.ParseQuantity(w.sysCfg.prometheusCPUResource)
 	mem, _ := resource.ParseQuantity(w.sysCfg.prometheusMemResource)
 
-	promclientset, err := prometheus.NewForConfig(w.cfg)
-	if err != nil {
-		return err
-	}
-
 	// Create Prometheus Resource
-	prometheusClient := promclientset.Prometheuses(monitoringNS)
+	prometheusClient := w.mClient.MonitoringV1().Prometheuses(monitoringNS)
 	promObject := &monitoringv1.Prometheus{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      w.sysCfg.prometheusInstanceName,
@@ -375,7 +369,7 @@ func (w *InitConfig) createPrometheus() error {
 			},
 		},
 	}
-	_, err = prometheusClient.Create(promObject)
+	_, err := prometheusClient.Create(promObject)
 	if err != nil {
 		return fmt.Errorf("Failed to create prometheus object. Error: %v", err.Error())
 	}
@@ -413,11 +407,6 @@ func (w *InitConfig) createPrometheus() error {
 }
 
 func (w *InitConfig) createPrometheusRules() error {
-	promclientset, err := prometheus.NewForConfig(w.cfg)
-	if err != nil {
-		return err
-	}
-
 	p := &PromRules{}
 	p.walkDir()
 
@@ -426,7 +415,7 @@ func (w *InitConfig) createPrometheusRules() error {
 	}
 
 	// Create Prometheus Rules Resource
-	prometheusClient := promclientset.PrometheusRules(monitoringNS)
+	prometheusRulesClient := w.mClient.MonitoringV1().PrometheusRules(monitoringNS)
 	promObject := &monitoringv1.PrometheusRule{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "system-prometheus-rules",
@@ -444,7 +433,7 @@ func (w *InitConfig) createPrometheusRules() error {
 		},
 	}
 
-	_, err = prometheusClient.Create(promObject)
+	_, err := prometheusRulesClient.Create(promObject)
 	if err != nil {
 		return fmt.Errorf("Failed to create prometheus rule object. Error: %v", err.Error())
 	}
@@ -453,13 +442,8 @@ func (w *InitConfig) createPrometheusRules() error {
 }
 
 func (w *InitConfig) createServiceMonitor() error {
-	promclientset, err := prometheus.NewForConfig(w.cfg)
-	if err != nil {
-		return err
-	}
-
 	// Create Service Monitor Resource
-	svcMonClient := promclientset.ServiceMonitors(monitoringNS)
+	serviceMonitorClient := w.mClient.MonitoringV1().ServiceMonitors(monitoringNS)
 	svcMonObject := &monitoringv1.ServiceMonitor{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "system-service-monitor",
@@ -495,7 +479,7 @@ func (w *InitConfig) createServiceMonitor() error {
 		},
 	}
 
-	_, err = svcMonClient.Create(svcMonObject)
+	_, err := serviceMonitorClient.Create(svcMonObject)
 	if err != nil {
 		return fmt.Errorf("Failed to create service-monitor object. Error: %v", err.Error())
 	}
@@ -524,13 +508,8 @@ func (w *InitConfig) createAlertManager() error {
 		return err
 	}
 
-	promclientset, err := prometheus.NewForConfig(w.cfg)
-	if err != nil {
-		return err
-	}
-
 	// Create Alert Manager Resource
-	alertMgrClient := promclientset.Alertmanagers(monitoringNS)
+	alertMgrClient := w.mClient.MonitoringV1().Alertmanagers(monitoringNS)
 	alertMgrObject := &monitoringv1.Alertmanager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      w.sysCfg.alertmanagerInstanceName,
