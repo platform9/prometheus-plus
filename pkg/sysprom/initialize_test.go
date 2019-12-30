@@ -16,7 +16,7 @@ func init() {
 	os.Setenv("CONFIG_DIR", "../../promplus")
 }
 
-func getNewConfig() (*InitConfig, error) {
+func getNewConfig() *InitConfig {
 	cfg := &rest.Config{
 		APIPath: "/apis",
 		ContentConfig: rest.ContentConfig{
@@ -33,35 +33,35 @@ func getNewConfig() (*InitConfig, error) {
 		client:  client,
 		mClient: mclient,
 		sysCfg:  getSystemPrometheusEnv(),
-	}, nil
+	}
 }
 
 func TestPrometheus(t *testing.T) {
-	syspc, _ := getNewConfig()
+	syspc := getNewConfig()
 	err := syspc.createPrometheus()
 	assert.Equal(t, nil, err)
 }
 
 func TestPrometheusRules(t *testing.T) {
-	syspc, _ := getNewConfig()
+	syspc := getNewConfig()
 	err := syspc.createPrometheusRules()
 	assert.Equal(t, nil, err)
 }
 
 func TestServiceMonitor(t *testing.T) {
-	syspc, _ := getNewConfig()
+	syspc := getNewConfig()
 	err := syspc.createServiceMonitor()
 	assert.Equal(t, nil, err)
 }
 
 func TestAlertManager(t *testing.T) {
-	syspc, _ := getNewConfig()
+	syspc := getNewConfig()
 	err := syspc.createAlertManager()
 	assert.Equal(t, nil, err)
 }
 
 func TestGrafana(t *testing.T) {
-	syspc, _ := getNewConfig()
+	syspc := getNewConfig()
 	err := syspc.createGrafana()
 	assert.Equal(t, nil, err)
 }
