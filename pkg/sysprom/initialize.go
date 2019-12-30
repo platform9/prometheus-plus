@@ -28,7 +28,6 @@ import (
 
 	monitoringv1 "github.com/coreos/prometheus-operator/pkg/apis/monitoring/v1"
 	monitoringclient "github.com/coreos/prometheus-operator/pkg/client/versioned"
-	prometheus "github.com/coreos/prometheus-operator/pkg/client/versioned/typed/monitoring/v1"
 	"github.com/pkg/errors"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/viper"
@@ -40,6 +39,7 @@ import (
 	"k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -50,12 +50,13 @@ const (
 	prometheusPort   = 9090
 	alertmanagerPort = 9093
 	monitoringNS     = "pf9-monitoring"
-	configDir        = "/etc/promplus"
+	operatorsNS      = "pf9-operators"
 	defaultDashboard = "grafana-dashboard-cluster-explorer"
 )
 
 //SystemPrometheusConfig stores system prometheus configuration
 type SystemPrometheusConfig struct {
+	configDir               string
 	grafanaCPUResource      string
 	grafanaMemResource      string
 	prometheusCPUResource   string
@@ -68,6 +69,9 @@ type SystemPrometheusConfig struct {
 	grafanaSvcName      string
 
 	crdWaitTime int
+
+	ownerInstanceName string
+	ownerInstanceUID  types.UID
 
 	portName                 string
 	prometheusInstanceName   string
@@ -113,8 +117,9 @@ func getEnv(env, def string) string {
 }
 
 func getSystemPrometheusEnv() (systemcfg *SystemPrometheusConfig) {
-
 	var syscfg SystemPrometheusConfig
+	syscfg.configDir = getEnv("CONFIG_DIR", "/etc/promplus")
+
 	waitPeriod := getEnv("CRD_WAIT_TIME_MIN", "10")
 	syscfg.crdWaitTime, _ = strconv.Atoi(waitPeriod)
 
@@ -137,6 +142,8 @@ func getSystemPrometheusEnv() (systemcfg *SystemPrometheusConfig) {
 	syscfg.portName = getEnv("PORT_NAME", "web")
 
 	syscfg.prometheusRetentionTime = getEnv("PROMETHEUS_RETENTION_TIME", "15d")
+
+	syscfg.ownerInstanceName = getEnv("OWNER_INSTANCE_NAME", "monhelper")
 
 	defSvcMonLabel := []string{
 		"node-exporter",
@@ -229,8 +236,8 @@ func (p *PromRules) walkApps(path string, f os.FileInfo, err error) error {
 	return nil
 }
 
-func (p *PromRules) walkDir() error {
-	if err := filepath.Walk(configDir+"/rules", p.walkApps); err != nil {
+func (p *PromRules) walkDir(w *InitConfig) error {
+	if err := filepath.Walk(w.sysCfg.configDir+"/rules", p.walkApps); err != nil {
 		return err
 	}
 
@@ -243,22 +250,25 @@ func SetupSystemPrometheus() error {
 	if err != nil {
 		log.Error(err, "when starting system prometheus controller")
 	}
-	if err := waitForCRD(syspc); err != nil {
+	if err := syspc.waitForCRD(); err != nil {
 		log.Error(err, "while waiting for CRD's to come up")
 	}
-	if err := createPrometheus(syspc); err != nil {
+	if err := syspc.getOwnerUID(); err != nil {
+		log.Error(err, "while getting parent UID")
+	}
+	if err := syspc.createPrometheus(); err != nil {
 		log.Error(err, "while creating prometheus instance")
 	}
-	if err := createPrometheusRules(syspc); err != nil {
+	if err := syspc.createPrometheusRules(); err != nil {
 		log.Error(err, "while creating prometheus rules")
 	}
-	if err := createServiceMonitor(syspc); err != nil {
+	if err := syspc.createServiceMonitor(); err != nil {
 		log.Error(err, "while creating service-monitor instance")
 	}
-	if err := createAlertManager(syspc); err != nil {
+	if err := syspc.createAlertManager(); err != nil {
 		log.Error(err, "while creating alert-manager instance")
 	}
-	if err := createGrafana(syspc); err != nil {
+	if err := syspc.createGrafana(); err != nil {
 		log.Error(err, "while creating grafana instance")
 	}
 
@@ -266,7 +276,7 @@ func SetupSystemPrometheus() error {
 }
 
 // waitForCRD waits for CRD's to be created
-func waitForCRD(w *InitConfig) error {
+func (w *InitConfig) waitForCRD() error {
 	var crds = []string{
 		"prometheuses.monitoring.coreos.com",
 		"prometheusrules.monitoring.coreos.com",
@@ -301,24 +311,32 @@ func waitForCRD(w *InitConfig) error {
 	return nil
 }
 
-// CreatePrometheus resource
-func createPrometheus(w *InitConfig) error {
+// getOwnerUID gets UID of the owner resource
+func (w *InitConfig) getOwnerUID() error {
+	deploymentClient := w.client.AppsV1().Deployments(operatorsNS)
+	data, err := deploymentClient.Get(w.sysCfg.ownerInstanceName, metav1.GetOptions{})
+	if err != nil {
+		return err
+	}
+	w.sysCfg.ownerInstanceUID = data.ObjectMeta.UID
+	return nil
+}
+
+func (w *InitConfig) createPrometheus() error {
 	var replicas int32
 	replicas = 1
 	cpu, _ := resource.ParseQuantity(w.sysCfg.prometheusCPUResource)
 	mem, _ := resource.ParseQuantity(w.sysCfg.prometheusMemResource)
 
-	promclientset, err := prometheus.NewForConfig(w.cfg)
-	if err != nil {
-		return err
-	}
-
 	// Create Prometheus Resource
-	prometheusClient := promclientset.Prometheuses(monitoringNS)
+	prometheusClient := w.mClient.MonitoringV1().Prometheuses(monitoringNS)
 	promObject := &monitoringv1.Prometheus{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      w.sysCfg.prometheusInstanceName,
 			Namespace: monitoringNS,
+			OwnerReferences: []metav1.OwnerReference{
+				getDefaultOwnerRefs(w),
+			},
 		},
 		Spec: monitoringv1.PrometheusSpec{
 			ServiceMonitorSelector: &metav1.LabelSelector{
@@ -343,7 +361,7 @@ func createPrometheus(w *InitConfig) error {
 				},
 			},
 			Alerting: &monitoringv1.AlertingSpec{
-				[]monitoringv1.AlertmanagerEndpoints{
+				Alertmanagers: []monitoringv1.AlertmanagerEndpoints{
 					monitoringv1.AlertmanagerEndpoints{
 						Name:      w.sysCfg.alertmanagerSvcName,
 						Namespace: monitoringNS,
@@ -353,7 +371,7 @@ func createPrometheus(w *InitConfig) error {
 			},
 		},
 	}
-	_, err = prometheusClient.Create(promObject)
+	_, err := prometheusClient.Create(promObject)
 	if err != nil {
 		return fmt.Errorf("Failed to create prometheus object. Error: %v", err.Error())
 	}
@@ -364,6 +382,9 @@ func createPrometheus(w *InitConfig) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      w.sysCfg.prometheusSvcName,
 			Namespace: monitoringNS,
+			OwnerReferences: []metav1.OwnerReference{
+				getDefaultOwnerRefs(w),
+			},
 		},
 		Spec: apiv1.ServiceSpec{
 			Type: "ClusterIP",
@@ -386,22 +407,17 @@ func createPrometheus(w *InitConfig) error {
 
 	return nil
 }
-func createPrometheusRules(w *InitConfig) error {
 
-	promclientset, err := prometheus.NewForConfig(w.cfg)
-	if err != nil {
-		return err
-	}
-
+func (w *InitConfig) createPrometheusRules() error {
 	p := &PromRules{}
-	p.walkDir()
+	p.walkDir(w)
 
 	for _, rule := range p.ruleGroup {
 		log.Debugf("Found rule: %s", rule.Name)
 	}
 
-	// Create Prometheus Rules
-	prometheusClient := promclientset.PrometheusRules(monitoringNS)
+	// Create Prometheus Rules Resource
+	prometheusRulesClient := w.mClient.MonitoringV1().PrometheusRules(monitoringNS)
 	promObject := &monitoringv1.PrometheusRule{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "system-prometheus-rules",
@@ -410,13 +426,16 @@ func createPrometheusRules(w *InitConfig) error {
 				"prometheus": w.sysCfg.prometheusInstanceName,
 				"role":       "alert-rules",
 			},
+			OwnerReferences: []metav1.OwnerReference{
+				getDefaultOwnerRefs(w),
+			},
 		},
 		Spec: monitoringv1.PrometheusRuleSpec{
 			Groups: p.ruleGroup,
 		},
 	}
 
-	_, err = prometheusClient.Create(promObject)
+	_, err := prometheusRulesClient.Create(promObject)
 	if err != nil {
 		return fmt.Errorf("Failed to create prometheus rule object. Error: %v", err.Error())
 	}
@@ -424,14 +443,9 @@ func createPrometheusRules(w *InitConfig) error {
 	return nil
 }
 
-func createServiceMonitor(w *InitConfig) error {
-	promclientset, err := prometheus.NewForConfig(w.cfg)
-	if err != nil {
-		return err
-	}
-
-	// Create Prometheus Rules
-	svcMonClient := promclientset.ServiceMonitors(monitoringNS)
+func (w *InitConfig) createServiceMonitor() error {
+	// Create Service Monitor Resource
+	serviceMonitorClient := w.mClient.MonitoringV1().ServiceMonitors(monitoringNS)
 	svcMonObject := &monitoringv1.ServiceMonitor{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "system-service-monitor",
@@ -439,6 +453,9 @@ func createServiceMonitor(w *InitConfig) error {
 			Labels: map[string]string{
 				"prometheus": w.sysCfg.prometheusInstanceName,
 				"role":       "service-monitor",
+			},
+			OwnerReferences: []metav1.OwnerReference{
+				getDefaultOwnerRefs(w),
 			},
 		},
 		Spec: monitoringv1.ServiceMonitorSpec{
@@ -464,7 +481,7 @@ func createServiceMonitor(w *InitConfig) error {
 		},
 	}
 
-	_, err = svcMonClient.Create(svcMonObject)
+	_, err := serviceMonitorClient.Create(svcMonObject)
 	if err != nil {
 		return fmt.Errorf("Failed to create service-monitor object. Error: %v", err.Error())
 	}
@@ -472,13 +489,13 @@ func createServiceMonitor(w *InitConfig) error {
 	return nil
 }
 
-func createAlertManager(w *InitConfig) error {
+func (w *InitConfig) createAlertManager() error {
 	var replicas int32
 	replicas = 1
 	cpu, _ := resource.ParseQuantity(w.sysCfg.alertmanagerCPUResource)
 	mem, _ := resource.ParseQuantity(w.sysCfg.alertmanagerMemResource)
 
-	file, err := os.Open(configDir + "/alertmanager.yaml")
+	file, err := os.Open(w.sysCfg.configDir + "/alertmanager.yaml")
 	if err != nil {
 		return err
 	}
@@ -493,17 +510,15 @@ func createAlertManager(w *InitConfig) error {
 		return err
 	}
 
-	promclientset, err := prometheus.NewForConfig(w.cfg)
-	if err != nil {
-		return err
-	}
-
-	// Create Prometheus Resource
-	alertMgrClient := promclientset.Alertmanagers(monitoringNS)
+	// Create Alert Manager Resource
+	alertMgrClient := w.mClient.MonitoringV1().Alertmanagers(monitoringNS)
 	alertMgrObject := &monitoringv1.Alertmanager{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      w.sysCfg.alertmanagerInstanceName,
 			Namespace: monitoringNS,
+			OwnerReferences: []metav1.OwnerReference{
+				getDefaultOwnerRefs(w),
+			},
 		},
 		Spec: monitoringv1.AlertmanagerSpec{
 			ServiceAccountName: "system-prometheus",
@@ -527,6 +542,9 @@ func createAlertManager(w *InitConfig) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      w.sysCfg.alertmanagerSvcName,
 			Namespace: monitoringNS,
+			OwnerReferences: []metav1.OwnerReference{
+				getDefaultOwnerRefs(w),
+			},
 		},
 		Spec: apiv1.ServiceSpec{
 			Type: "ClusterIP",
@@ -556,10 +574,10 @@ func getDashboards(configDir string) ([]string, error) {
 	if err := filepath.Walk(configDir, func(path string, f os.FileInfo, err error) error {
 		fName := strings.ToLower(f.Name())
 		if !strings.HasPrefix(fName, "grafana-dashboard-") {
-			log.Infof("Skipping %s, not a dashboard", fName)
+			log.Debugf("Skipping %s, not a dashboard", fName)
 			return nil
 		}
-		log.Infof("Treating %s as dashboard", fName)
+		log.Debugf("Treating %s as dashboard", fName)
 		configFiles = append(configFiles, fName)
 
 		return nil
@@ -696,7 +714,7 @@ func getVolumes(dashboards []string) []apiv1.Volume {
 	return volumes
 }
 
-func createGrafana(w *InitConfig) error {
+func (w *InitConfig) createGrafana() error {
 	var replicas int32
 	replicas = 1
 	cpu, _ := resource.ParseQuantity(w.sysCfg.grafanaCPUResource)
@@ -704,7 +722,7 @@ func createGrafana(w *InitConfig) error {
 	mem, _ := resource.ParseQuantity(w.sysCfg.grafanaMemResource)
 
 	// Create Secret for Grafana
-	file, err := os.Open(configDir + "/grafana-datasources")
+	file, err := os.Open(w.sysCfg.configDir + "/grafana-datasources")
 	if err != nil {
 		return err
 	}
@@ -720,38 +738,38 @@ func createGrafana(w *InitConfig) error {
 	}
 
 	// Create configmap for adding dashboard in Grafana
-	err = createConfigMap(w, "grafana-dashboards", monitoringNS, "dashboards.yaml", configDir+"/grafana-dashboards")
+	err = createConfigMap(w, "grafana-dashboards", monitoringNS, "dashboards.yaml", w.sysCfg.configDir+"/grafana-dashboards")
 	if err != nil {
 		return err
 	}
 
-	dashboards, err := getDashboards(configDir)
+	dashboards, err := getDashboards(w.sysCfg.configDir)
 	if err != nil {
 		return err
 	}
 
 	// Configmaps for dashboards
 	for _, cfgFile := range dashboards {
-		log.Infof("Creating configmap for %s", cfgFile)
+		log.Debugf("Creating configmap for %s", cfgFile)
 		if cfgFile == defaultDashboard {
-			if err := createConfigMap(w, cfgFile, monitoringNS, "home.json", configDir+"/"+cfgFile); err != nil {
+			if err := createConfigMap(w, cfgFile, monitoringNS, "home.json", w.sysCfg.configDir+"/"+cfgFile); err != nil {
 				return err
 			}
 			continue
 		}
-		if err := createConfigMap(w, cfgFile, monitoringNS, cfgFile+".json", configDir+"/"+cfgFile); err != nil {
+		if err := createConfigMap(w, cfgFile, monitoringNS, cfgFile+".json", w.sysCfg.configDir+"/"+cfgFile); err != nil {
 			return err
 		}
 	}
 
 	// Create configmap for adding nginx configs in Grafana
-	err = createConfigMap(w, "nginx-conf", monitoringNS, "nginx.conf", configDir+"/nginx-config")
+	err = createConfigMap(w, "nginx-conf", monitoringNS, "nginx.conf", w.sysCfg.configDir+"/nginx-config")
 	if err != nil {
 		return err
 	}
 
 	// Create configmap for adding grafana configs
-	err = createConfigMap(w, "grafana-conf", monitoringNS, "grafana.ini", configDir+"/grafana-config")
+	err = createConfigMap(w, "grafana-conf", monitoringNS, "grafana.ini", w.sysCfg.configDir+"/grafana-config")
 	if err != nil {
 		return err
 	}
@@ -762,6 +780,9 @@ func createGrafana(w *InitConfig) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "grafana",
 			Namespace: monitoringNS,
+			OwnerReferences: []metav1.OwnerReference{
+				getDefaultOwnerRefs(w),
+			},
 		},
 		Spec: appsv1.DeploymentSpec{
 			Replicas: &replicas,
@@ -842,6 +863,9 @@ func createGrafana(w *InitConfig) error {
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      w.sysCfg.grafanaSvcName,
 			Namespace: monitoringNS,
+			OwnerReferences: []metav1.OwnerReference{
+				getDefaultOwnerRefs(w),
+			},
 		},
 		Spec: apiv1.ServiceSpec{
 			Selector: map[string]string{
@@ -869,6 +893,9 @@ func createSecret(w *InitConfig, name string, namespace string, key string, data
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				getDefaultOwnerRefs(w),
+			},
 		},
 		Data: map[string][]byte{
 			key: data,
@@ -894,6 +921,9 @@ func createConfigMap(w *InitConfig, name string, namespace string, param string,
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				getDefaultOwnerRefs(w),
+			},
 		},
 		Data: map[string]string{
 			param: string(configData),
@@ -906,4 +936,15 @@ func createConfigMap(w *InitConfig, name string, namespace string, param string,
 	return nil
 }
 
-func int32Ptr(i int32) *int32 { return &i }
+func boolPtr(i bool) *bool { return &i }
+
+func getDefaultOwnerRefs(w *InitConfig) metav1.OwnerReference {
+	return metav1.OwnerReference{
+		APIVersion:         "apps/v1",
+		BlockOwnerDeletion: boolPtr(false),
+		Controller:         boolPtr(false),
+		Kind:               "Deployment",
+		Name:               w.sysCfg.ownerInstanceName,
+		UID:                w.sysCfg.ownerInstanceUID,
+	}
+}
