@@ -9,24 +9,6 @@
           },
           "orgId": 1,
           "type": "file"
-      },
-      {
-          "folder": "",
-          "name": "1",
-          "options": {
-              "path": "/grafana-dashboard-definitions/1"
-          },
-          "orgId": 1,
-          "type": "file"
-      },
-      {
-          "folder": "",
-          "name": "2",
-          "options": {
-              "path": "/grafana-dashboard-definitions/2"
-          },
-          "orgId": 1,
-          "type": "file"
       }
   ]
 }

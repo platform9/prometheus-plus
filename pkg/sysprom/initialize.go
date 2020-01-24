@@ -123,11 +123,11 @@ func getSystemPrometheusEnv() (systemcfg *SystemPrometheusConfig) {
 	waitPeriod := getEnv("CRD_WAIT_TIME_MIN", "10")
 	syscfg.crdWaitTime, _ = strconv.Atoi(waitPeriod)
 
-	syscfg.prometheusCPUResource = getEnv("PROMETHEUS_CPU_RESOURCE", "500m")
-	syscfg.prometheusMemResource = getEnv("PROMETHEUS_MEM_RESOURCE", "512Mi")
+	syscfg.prometheusCPUResource = getEnv("PROMETHEUS_CPU_RESOURCE", "300m")
+	syscfg.prometheusMemResource = getEnv("PROMETHEUS_MEM_RESOURCE", "128Mi")
 
-	syscfg.alertmanagerCPUResource = getEnv("ALERTMANAGER_CPU_RESOURCE", "100m")
-	syscfg.alertmanagerMemResource = getEnv("ALERTMANAGER_MEM_RESOURCE", "512Mi")
+	syscfg.alertmanagerCPUResource = getEnv("ALERTMANAGER_CPU_RESOURCE", "50m")
+	syscfg.alertmanagerMemResource = getEnv("ALERTMANAGER_MEM_RESOURCE", "64Mi")
 
 	syscfg.grafanaCPUResource = getEnv("GRAFANA_CPU_RESOURCE", "100m")
 	syscfg.grafanaMemResource = getEnv("GRAFANA_MEM_RESOURCE", "100Mi")
