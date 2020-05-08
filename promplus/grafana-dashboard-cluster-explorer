@@ -1626,7 +1626,7 @@
         "multiFormat": "regex values",
         "name": "host",
         "options": [],
-        "query": "label_values($tag)",
+        "query": "label_values(node_uname_info, instance)",
         "refresh": 1,
         "refresh_on_load": false,
         "regex": "",
@@ -1638,31 +1638,14 @@
         "useTags": false
       },
       {
-        "allValue": null,
         "current": {
-          "tags": [],
-          "text": "alias",
-          "value": "alias"
+          "text": "instance",
+          "value": "instance"
         },
-        "hide": 0,
-        "includeAll": false,
-        "label": null,
+        "hide": 2,
         "multi": false,
         "name": "tag",
-        "options": [
-          {
-            "selected": false,
-            "text": "instance",
-            "value": "instance"
-          },
-          {
-            "selected": true,
-            "text": "alias",
-            "value": "alias"
-          }
-        ],
-        "query": "instance, alias",
-        "type": "custom"
+        "type": "constant"
       }
     ]
   },
