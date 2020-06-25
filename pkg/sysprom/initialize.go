@@ -255,11 +255,6 @@ func SetupSystemPrometheus() error {
 		log.Error(err, "while getting parent UID")
 	}
 
-	// first create envoy proxy so that it will be ready by the time system
-	// prometheus initializes
-	if err := syspc.createEnvoyDeployment(); err != nil {
-		log.Error(err, "while creating envoy proxy")
-	}
 	if err := syspc.waitForCRD(); err != nil {
 		log.Error(err, "while waiting for CRD's to come up")
 	}
@@ -374,12 +369,6 @@ func (w *InitConfig) createPrometheus() error {
 						Namespace: monitoringNS,
 						Port:      intstr.FromString(w.sysCfg.portName),
 					},
-				},
-			},
-			RemoteWrite: []monitoringv1.RemoteWriteSpec{
-				{
-					ProxyURL: "http://comms-proxy:9900/",
-					URL:      "http://localhost:8158/remote-write-proxy",
 				},
 			},
 		},
@@ -896,117 +885,6 @@ func (w *InitConfig) createGrafana() error {
 	if err != nil {
 		return err
 	}
-
-	return nil
-}
-
-// envoy is needed for remote write functionality
-func (w *InitConfig) createEnvoyDeployment() error {
-	err := createConfigMap(w,
-		"comms-proxy-map", monitoringNS,
-		"config.json", fmt.Sprintf("%s/%s", w.sysCfg.configDir, "envoy-cfg.json"))
-
-	if err != nil {
-		return err
-	}
-
-	proxyName := "comms-proxy"
-	var proxyPort int32 = 9900
-	proxyLabels := map[string]string{
-		"app": "comms-proxy",
-	}
-
-	log.Debug("Created envoy configmap")
-
-	envoyDs := appsv1.DaemonSet{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:   "comms-proxy",
-			Labels: proxyLabels,
-			OwnerReferences: []metav1.OwnerReference{
-				getDefaultOwnerRefs(w),
-			},
-		},
-		Spec: appsv1.DaemonSetSpec{
-			Selector: &metav1.LabelSelector{
-				MatchLabels: proxyLabels,
-			},
-			Template: apiv1.PodTemplateSpec{
-				ObjectMeta: metav1.ObjectMeta{
-					Labels: proxyLabels,
-				},
-				Spec: apiv1.PodSpec{
-					HostNetwork: true,
-					Containers: []apiv1.Container{
-						{
-							Name:  "envoy",
-							Image: "envoyproxy/envoy-alpine:v1.12.2",
-							Command: []string{
-								"/usr/local/bin/envoy",
-								"-c",
-								"/etc/envoy/config.json",
-							},
-							Ports: []apiv1.ContainerPort{
-								{
-									ContainerPort: proxyPort,
-								},
-							},
-							VolumeMounts: []apiv1.VolumeMount{
-								{
-									Name:      "config-volume",
-									MountPath: "/etc/envoy",
-								},
-							},
-						},
-					},
-					Volumes: []apiv1.Volume{
-						{
-							Name: "config-volume",
-							VolumeSource: apiv1.VolumeSource{
-								ConfigMap: &apiv1.ConfigMapVolumeSource{
-									LocalObjectReference: apiv1.LocalObjectReference{
-										Name: "comms-proxy-map",
-									},
-								},
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-
-	dsClient := w.client.AppsV1().DaemonSets(monitoringNS)
-	if _, err = dsClient.Create(&envoyDs); err != nil {
-		return err
-	}
-
-	log.Debug("Created envoy daemonset")
-
-	envoySvc := apiv1.Service{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: proxyName,
-			OwnerReferences: []metav1.OwnerReference{
-				getDefaultOwnerRefs(w),
-			},
-		},
-		Spec: apiv1.ServiceSpec{
-			Selector: proxyLabels,
-			Ports: []apiv1.ServicePort{
-				{
-					Port:       proxyPort,
-					Protocol:   apiv1.ProtocolTCP,
-					TargetPort: intstr.FromInt(int(proxyPort)),
-				},
-			},
-		},
-	}
-
-	svcClient := w.client.CoreV1().Services(monitoringNS)
-	if _, err = svcClient.Create(&envoySvc); err != nil {
-		return err
-	}
-
-	log.Debug("Created envoy service")
 
 	return nil
 }
