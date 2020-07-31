@@ -19,11 +19,18 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
-	prometheus "github.com/platform9/prometheus-plus/pkg/prometheus"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
+	core_v1 "k8s.io/api/core/v1"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/tools/clientcmd"
+
 	"github.com/platform9/prometheus-plus/pkg/sysprom"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
@@ -35,11 +42,46 @@ var mode string
 var logLevel string
 var initMode bool
 
+var landingPage = []byte(`<html>
+<head><title>Event exporter</title></head>
+<body>
+<h1>Event exporter</h1>
+<p><a href='` + "/metrics" + `'>Metrics</a></p>
+</body>
+</html>
+`)
+
 const (
 	defaultMode     = "standalone"
 	defaultLogLevel = "INFO"
 	defaultInitMode = false
 )
+
+func setupEventExporter() {
+	config, err := clientcmd.BuildConfigFromFlags("", "")
+	if err != nil {
+		log.Fatalf("build kubeconfig: %v", err)
+	}
+	client, err := kubernetes.NewForConfig(config)
+	if err != nil {
+		log.Fatalf("create client:", err)
+	}
+	store := NewEventStore(client,
+		time.Duration(20)*time.Second,
+		time.Duration(30000)*time.Second,
+		core_v1.NamespaceAll)
+	go store.Run()
+	exporter := NewExporter(store)
+	prometheus.MustRegister(exporter)
+
+	http.Handle("/metrics", promhttp.Handler())
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write(landingPage)
+	})
+
+	log.Info("Listening on", ":9102")
+	log.Fatal(http.ListenAndServe(":9102", nil))
+}
 
 // Main is the entry point of helper controller
 func Main() int {
@@ -56,15 +98,11 @@ func Main() int {
 		log.Info("Successfully installed system prometheus")
 	}
 
-	pc, err := prometheus.New()
-	if err != nil {
-		log.Error(err, "when starting controller...")
-		return 1
-	}
-
 	ctx, cancel := context.WithCancel(context.Background())
 	wg, ctx := errgroup.WithContext(ctx)
-	wg.Go(func() error { return pc.Run(ctx.Done()) })
+
+	setupEventExporter()
+	//wg.Go(func() error { return pc.Run(ctx.Done()) })
 
 	term := make(chan os.Signal)
 	signal.Notify(term, os.Interrupt, syscall.SIGTERM)
