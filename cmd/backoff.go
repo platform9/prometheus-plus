@@ -100,7 +100,8 @@ func (p *Backoff) AllKeysStateSinceUpdate(eventTime time.Time) map[string]bool {
 	for id, entry := range p.perItemEntry {
 		if hasExpired(eventTime, entry.lastUpdate, p.maxDuration) {
 			fmt.Printf("\nExpired Key in loop: %s", id)
-			continue
+			state[id] = true
+			//continue
 		} else if eventTime.Sub(entry.lastUpdate) < entry.backoff {
 			state[id] = true
 		} else if eventTime.Sub(entry.lastUpdate) >= entry.backoff {
