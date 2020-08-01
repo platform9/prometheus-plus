@@ -95,14 +95,14 @@ func eventCleaning(e *core_v1.Event) {
 
 func eventListFunc(c kubernetes.Interface, ns string) func(meta_v1.ListOptions) (runtime.Object, error) {
 	return func(options meta_v1.ListOptions) (runtime.Object, error) {
-		//options.FieldSelector = "type!=Normal"
+		options.FieldSelector = "type!=Normal"
 		return c.CoreV1().Events(ns).List(options)
 	}
 }
 
 func eventWatchFunc(c kubernetes.Interface, ns string) func(meta_v1.ListOptions) (watch.Interface, error) {
 	return func(options meta_v1.ListOptions) (watch.Interface, error) {
-		//options.FieldSelector = "type!=Normal"
+		options.FieldSelector = "type!=Normal"
 		return c.CoreV1().Events(ns).Watch(options)
 	}
 }
@@ -163,5 +163,5 @@ func (es *EventStore) Scrap(ch chan<- prometheus.Metric) {
 			fmt.Sprintf("%s/%s", event.Source.Host, event.Source.Component),
 		)
 	}
-	es.backoff.GC()
+	//es.backoff.GC()
 }
