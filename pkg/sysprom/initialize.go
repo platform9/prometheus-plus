@@ -148,6 +148,7 @@ func getSystemPrometheusEnv() (systemcfg *SystemPrometheusConfig) {
 	defSvcMonLabel := []string{
 		"node-exporter",
 		"kube-state-metrics",
+		"mon-helper",
 	}
 
 	svcMonLabels := getEnv("SERVICE_MONITOR_LABELS", "")
@@ -261,9 +262,11 @@ func SetupSystemPrometheus() error {
 	if err := syspc.createPrometheus(); err != nil {
 		log.Error(err, "while creating prometheus instance")
 	}
+
 	if err := syspc.createPrometheusRules(); err != nil {
 		log.Error(err, "while creating prometheus rules")
 	}
+
 	if err := syspc.createServiceMonitor(); err != nil {
 		log.Error(err, "while creating service-monitor instance")
 	}
@@ -330,6 +333,21 @@ func (w *InitConfig) createPrometheus() error {
 	cpu, _ := resource.ParseQuantity(w.sysCfg.prometheusCPUResource)
 	mem, _ := resource.ParseQuantity(w.sysCfg.prometheusMemResource)
 
+	file, err := os.Open(w.sysCfg.configDir + "/additional-scrape-config.yaml")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	promSecret, err := ioutil.ReadAll(file)
+	if err != nil {
+		return err
+	}
+
+	err = createSecret(w, "scrapeconfig", monitoringNS, "additional-scrape-config.yaml", promSecret)
+	if err != nil {
+		return err
+	}
+
 	// Create Prometheus Resource
 	prometheusClient := w.mClient.MonitoringV1().Prometheuses(monitoringNS)
 	promObject := &monitoringv1.Prometheus{
@@ -371,9 +389,15 @@ func (w *InitConfig) createPrometheus() error {
 					},
 				},
 			},
+			AdditionalScrapeConfigs: &apiv1.SecretKeySelector{
+				Key: "additional-scrape-config.yaml",
+				LocalObjectReference: apiv1.LocalObjectReference{
+					Name: "scrapeconfig",
+				},
+			},
 		},
 	}
-	_, err := prometheusClient.Create(promObject)
+	_, err = prometheusClient.Create(promObject)
 	if err != nil {
 		return fmt.Errorf("Failed to create prometheus object. Error: %v", err.Error())
 	}

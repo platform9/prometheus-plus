@@ -1,0 +1,104 @@
+  {
+    "name": "kube-events",
+    "rules": [
+      {
+        "alert": "EvictedPods",
+        "annotations": {
+          "message": "Evicted pod: {{ $labels.event_namespace }}/{{ $labels.event_name }}::{{ $labels.event_message }}"
+        },
+        "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"Evicted\"}\n",
+        "for": "1m",
+        "labels": {
+          "severity": "critical"
+        }
+      },
+      {
+        "alert": "FailedCreate",
+        "annotations": {
+          "message": "Failed to create resource: {{ $labels.event_namespace }}/{{ $labels.event_name }}::{{ $labels.event_message }}"
+        },
+        "expr": "kubernetes_events{event_reason=\"FailedCreate\",event_type=\"Warning\"}\n",
+        "for": "1m",
+        "labels": {
+          "severity": "critical"
+        }
+      },
+      {
+        "alert": "FailedScheduling",
+        "annotations": {
+          "message": "Failed to schedule pod: {{ $labels.event_namespace }}/{{ $labels.event_name }}::{{ $labels.event_message }}"
+        },
+        "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"FailedScheduling\",event_type=\"Warning\"}\n",
+        "for": "1m",
+        "labels": {
+          "severity": "critical"
+        }
+      },
+      {
+        "alert": "BackOff",
+        "annotations": {
+          "message": "Pod restaring with error: {{ $labels.event_namespace }}/{{ $labels.event_name }}"
+        },
+        "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"BackOff\",event_type=\"Warning\"}\n",
+        "for": "1m",
+        "labels": {
+          "severity": "critical"
+        }
+      },
+      {
+        "alert": "ImagePullBackoff",
+        "annotations": {
+          "message": "Failed to pull image: {{ $labels.event_namespace }}/{{ $labels.event_name }}"
+        },
+        "expr": "kubernetes_events{event_kind=\"Pod\", event_message=\"Error: ImagePullBackOff\", event_reason=\"Failed\",event_type=\"Warning\"}\n",
+        "for": "1m",
+        "labels": {
+          "severity": "critical"
+        }
+      },
+      {
+        "alert": "FailedMount",
+        "annotations": {
+          "message": "Failed to mount volume on pod: {{ $labels.event_metaname }}::{{ $labels.event_message }}"
+        },
+        "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"FailedMount\",event_type=\"Warning\"} != 0\n",
+        "for": "1m",
+        "labels": {
+          "severity": "critical"
+        }
+      },
+      {
+        "alert": "FailedAttachVolume",
+        "annotations": {
+          "message": "Failed to attach volume to pod: {{ $labels.event_metaname }}::{{ $labels.event_message }}"
+        },
+        "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"FailedAttachVolume\",event_type=\"Warning\"}\n",
+        "for": "1m",
+        "labels": {
+          "severity": "critical"
+        }
+      },
+      {
+        "alert": "PVCProvisioningFailed",
+        "annotations": {
+          "message": "Failed to provision PVC: {{ $labels.event_metaname }}::{{ $labels.event_message }}"
+        },
+        "expr": " kubernetes_events{event_kind=\"PersistentVolumeClaim\", event_reason=\"ProvisioningFailed\",event_type=\"Warning\"} != 0\n",
+        "for": "1m",
+        "labels": {
+          "severity": "critical"
+        }
+      },
+      {
+        "alert": "PVCPending",
+        "annotations": {
+          "message": "Pending PVC found: {{ $labels.persistentvolumeclaim }}"
+        },
+        "expr": "kube_persistentvolumeclaim_status_phase{phase=\"Pending\"}\n",
+        "for": "1m",
+        "labels": {
+          "severity": "critical"
+        }
+      }
+    ]
+  }
