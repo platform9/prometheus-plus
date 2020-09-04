@@ -70,7 +70,7 @@ func NewEventCollector(w *Watcher) *eventCollector {
 		eventMetric: prometheus.NewDesc(
 			"kubernetes_events",
 			"State of kubernetes events",
-			[]string{"event_namespace", "event_name", "event_kind", "event_reason", "event_type", "event_message", "event_source"},
+			[]string{"event_namespace", "event_name", "event_kind", "event_objname", "event_reason", "event_type", "event_message", "event_source"},
 			nil,
 		),
 		w: w,
@@ -92,7 +92,8 @@ func (collector *eventCollector) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(collector.eventMetric, prometheus.GaugeValue, float64(ev.Count),
 			ev.Namespace,
 			ev.Name,
-			ev.Kind,
+			ev.InvolvedObject.Kind,
+			ev.InvolvedObject.Name,
 			ev.Reason,
 			ev.Type,
 			ev.Message,
@@ -123,11 +124,11 @@ func buildWatcher(cfg *rest.Config) (*Watcher, error) {
 	eventInf := cache.NewSharedIndexInformer(
 		&cache.ListWatch{
 			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
-				//options.FieldSelector = "type!=Normal"
+				options.FieldSelector = "type!=Normal"
 				return client.CoreV1().Events(metav1.NamespaceAll).List(options)
 			},
 			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
-				//options.FieldSelector = "type!=Normal"
+				options.FieldSelector = "type!=Normal"
 				return client.CoreV1().Events(metav1.NamespaceAll).Watch(options)
 			},
 		},
@@ -318,7 +319,7 @@ func (w *Watcher) syncEvent(key string) error {
 	for n, ev := range w.eventCache {
 		//fmt.Printf("\nChecking event %s/%s: %d", e.Namespace, e.Name, e.Count)
 		if ev.deleted {
-			if t.After(ev.createdAt.Add(30 * time.Minute)) {
+			if t.After(ev.createdAt.Add(60 * time.Minute)) {
 				delete(w.eventCache, n)
 			}
 			continue
@@ -331,10 +332,13 @@ func (w *Watcher) syncEvent(key string) error {
 		}
 	}
 
-	/*fmt.Printf("\nns: %s, \nname: %s, \nreason: %s, \nmsg: %s, \ncnt: %d, \nevtm: %s, \ncn: %s, \nrc: %s, \nri: %s, \nac: %s",
+	/*fmt.Printf("\nns: %s, \nname: %s, \nreason: %s, \nkind: %s, \ninv obj: %s, \ninv obj ns: %s,\nmsg: %s, \ncnt: %d, \nevtm: %s, \ncn: %s, \nrc: %s, \nri: %s, \nac: %s",
 	e.Namespace,
 	e.Name,
 	e.Reason,
+	e.InvolvedObject.Kind,
+	e.InvolvedObject.Name,
+	e.InvolvedObject.Namespace,
 	e.Message,
 	e.Count,
 	e.EventTime,

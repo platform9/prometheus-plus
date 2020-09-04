@@ -99,6 +99,17 @@
         "labels": {
           "severity": "critical"
         }
+      },
+      {
+        "alert": "Liveness Probe Failed",
+        "annotations": {
+          "message": "{{ $labels.event_message }} {{ $labels.event_namespace }}/{{ $labels.event_objname }}"
+        },
+        "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"Unhealthy\",event_type=\"Warning\"} > 3\n",
+        "for": "1m",
+        "labels": {
+          "severity": "warning"
+        }
       }
     ]
   }

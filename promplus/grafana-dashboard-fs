@@ -396,7 +396,7 @@
       },
       "id": 10,
       "panels": [],
-      "title": "Namespace wide",
+      "title": "Pod wide",
       "type": "row"
     },
     {
@@ -581,7 +581,7 @@
       },
       "id": 4,
       "panels": [],
-      "title": "Pod wide",
+      "title": "Container wide",
       "type": "row"
     },
     {

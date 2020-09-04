@@ -57,7 +57,7 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
+      "linewidth": 3,
       "nullPointMode": "null",
       "options": {
         "dataLinks": []
@@ -148,7 +148,7 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
+      "linewidth": 3,
       "nullPointMode": "null",
       "options": {
         "dataLinks": []
@@ -234,7 +234,7 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
+      "linewidth": 3,
       "nullPointMode": "null",
       "options": {
         "dataLinks": []
@@ -333,7 +333,7 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
+      "linewidth": 3,
       "nullPointMode": "null",
       "options": {
         "dataLinks": []
@@ -424,7 +424,7 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
+      "linewidth": 3,
       "nullPointMode": "null",
       "options": {
         "dataLinks": []
@@ -510,7 +510,7 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
+      "linewidth": 3,
       "nullPointMode": "null",
       "options": {
         "dataLinks": []
@@ -609,7 +609,7 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
+      "linewidth": 3,
       "nullPointMode": "null",
       "options": {
         "dataLinks": []
@@ -695,7 +695,7 @@
         "values": false
       },
       "lines": true,
-      "linewidth": 2,
+      "linewidth": 3,
       "nullPointMode": "null",
       "options": {
         "dataLinks": []
