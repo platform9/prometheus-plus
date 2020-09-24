@@ -12,7 +12,7 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
   "links": [],
@@ -58,7 +58,7 @@
       "targets": [
         {
           "expr": "kubernetes_events{event_kind=\"Pod\", event_message=\"Error: ImagePullBackOff\", event_reason=\"Failed\",event_type=\"Warning\"} ",
-          "legendFormat": "{{event_namespace}}/{{event_name}}",
+          "legendFormat": "{{event_objname}} :: {{event_message}}",
           "refId": "A"
         }
       ],
@@ -144,7 +144,7 @@
       "targets": [
         {
           "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"Unhealthy\",event_type=\"Warning\"} > 5",
-          "legendFormat": "{{event_namespace}}/{{event_objname}}  {{event_message}}",
+          "legendFormat": "{{event_objname}} :: {{event_message}}",
           "refId": "A"
         }
       ],
@@ -203,6 +203,93 @@
         "x": 0,
         "y": 18
       },
+      "id": 10,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"Unhealthy\"}",
+          "legendFormat": "{{event_objname}} :: {{ event_message}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Unhealthy",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus",
+      "fill": 4,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 27
+      },
       "id": 3,
       "legend": {
         "avg": false,
@@ -230,7 +317,7 @@
       "targets": [
         {
           "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"BackOff\",event_type=\"Warning\"} ",
-          "legendFormat": "{{event_namespace}}/{{event_name}}",
+          "legendFormat": "{{event_objname}} :: {{event_message}}",
           "refId": "A"
         }
       ],
@@ -287,7 +374,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 27
+        "y": 36
       },
       "id": 4,
       "legend": {
@@ -316,8 +403,8 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"FailedScheduling\",event_type=\"Warning\"} ",
-          "legendFormat": "{{event_namespace}}/{{event_name}}::{{event_message}}",
+          "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"FailedScheduling\",event_type=\"Warning\"} + 1",
+          "legendFormat": "{{event_objname}} :: {{event_message}}",
           "refId": "A"
         }
       ],
@@ -374,7 +461,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 36
+        "y": 45
       },
       "id": 5,
       "legend": {
@@ -404,7 +491,7 @@
       "targets": [
         {
           "expr": "kubernetes_events{event_reason=\"FailedCreate\",event_type=\"Warning\"} ",
-          "legendFormat": "{{event_namespace}}/{{event_name}}::{{event_message}}",
+          "legendFormat": "{{event_objname}} :: {{event_message}}",
           "refId": "A"
         }
       ],
@@ -461,7 +548,7 @@
         "h": 9,
         "w": 24,
         "x": 0,
-        "y": 45
+        "y": 54
       },
       "id": 6,
       "legend": {
@@ -491,7 +578,7 @@
       "targets": [
         {
           "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"Evicted\"}",
-          "legendFormat": "{{event_namespace}}/{{event_name}}::{{event_message}}",
+          "legendFormat": "{{event_objname}} :: {{event_message}}",
           "refId": "A"
         }
       ],
@@ -535,8 +622,270 @@
         "align": false,
         "alignLevel": null
       }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus",
+      "fill": 4,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 63
+      },
+      "id": 11,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "kubernetes_events{event_kind=\"Node\", event_reason=\"EvictionThresholdMet\"}",
+          "legendFormat": "{{event_objname}} :: {{ event_message}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "EvictionThresholdMet",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus",
+      "fill": 4,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 72
+      },
+      "id": 8,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "kubernetes_events{event_kind=\"Pod\", event_reason=\"FailedPreStopHook\"}",
+          "legendFormat": "{{event_objname}} :: {{ event_message}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "FailedPreStopHook",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "prometheus",
+      "fill": 4,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 81
+      },
+      "id": 9,
+      "legend": {
+        "alignAsTable": true,
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "dataLinks": []
+      },
+      "percentage": false,
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "expr": "kubernetes_events{event_kind=\"DaemonSet\", event_reason=\"FailedDaemonPod\"}",
+          "legendFormat": "{{event_objname}} :: {{ event_message}}",
+          "refId": "A"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "FailedDaemonPod",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
     }
   ],
+  "refresh": false,
   "schemaVersion": 19,
   "style": "dark",
   "tags": [],

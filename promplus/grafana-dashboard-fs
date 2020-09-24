@@ -12,11 +12,10 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 8,
-  "iteration": 1598791987707,
+  "iteration": 1600949524850,
   "links": [],
   "panels": [
     {
@@ -766,9 +765,9 @@
         "allValue": null,
         "current": {
           "tags": [],
-          "text": "pf9-monitoring",
+          "text": "All",
           "value": [
-            "pf9-monitoring"
+            "$__all"
           ]
         },
         "datasource": "prometheus",
@@ -794,9 +793,9 @@
         "allValue": null,
         "current": {
           "tags": [],
-          "text": "prometheus-system-0",
+          "text": "All",
           "value": [
-            "prometheus-system-0"
+            "$__all"
           ]
         },
         "datasource": "prometheus",
@@ -822,9 +821,9 @@
         "allValue": null,
         "current": {
           "tags": [],
-          "text": "prometheus",
+          "text": "All",
           "value": [
-            "prometheus"
+            "$__all"
           ]
         },
         "datasource": "prometheus",
@@ -869,5 +868,5 @@
   "timezone": "",
   "title": "FS Usage",
   "uid": "AwGCTjHMk",
-  "version": 15
+  "version": 1
 }

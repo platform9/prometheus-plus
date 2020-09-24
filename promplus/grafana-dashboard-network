@@ -12,11 +12,10 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 9,
-  "iteration": 1598688442634,
+  "iteration": 1600949593969,
   "links": [],
   "panels": [
     {
@@ -765,9 +764,10 @@
       {
         "allValue": null,
         "current": {
-          "text": "pf9-monitoring",
+          "tags": [],
+          "text": "All",
           "value": [
-            "pf9-monitoring"
+            "$__all"
           ]
         },
         "datasource": "prometheus",
@@ -792,10 +792,8 @@
       {
         "allValue": null,
         "current": {
-          "text": "grafana-7c58bb84d4-cdm84",
-          "value": [
-            "grafana-7c58bb84d4-cdm84"
-          ]
+          "text": "All",
+          "value": "$__all"
         },
         "datasource": "prometheus",
         "definition": "label_values(kube_pod_info{exported_namespace=~\"$namespace\"}, exported_pod)",
@@ -819,9 +817,10 @@
       {
         "allValue": null,
         "current": {
-          "text": "grafana",
+          "tags": [],
+          "text": "All",
           "value": [
-            "grafana"
+            "$__all"
           ]
         },
         "datasource": "prometheus",
@@ -866,5 +865,5 @@
   "timezone": "",
   "title": "Network",
   "uid": "NBiN5eHGk",
-  "version": 3
+  "version": 1
 }

@@ -12,11 +12,11 @@
       }
     ]
   },
-  "editable": true,
+  "editable": false,
   "gnetId": null,
   "graphTooltip": 0,
-  "id": 7,
-  "iteration": 1598695635153,
+  "id": 14,
+  "iteration": 1600949351691,
   "links": [],
   "panels": [
     {
@@ -1365,9 +1365,9 @@
         "allValue": null,
         "current": {
           "tags": [],
-          "text": "pf9-monitoring",
+          "text": "All",
           "value": [
-            "pf9-monitoring"
+            "$__all"
           ]
         },
         "datasource": "prometheus",
@@ -1392,11 +1392,10 @@
       {
         "allValue": null,
         "current": {
-          "selected": false,
           "tags": [],
-          "text": "prometheus-system-0",
+          "text": "All",
           "value": [
-            "prometheus-system-0"
+            "$__all"
           ]
         },
         "datasource": "prometheus",
@@ -1421,11 +1420,10 @@
       {
         "allValue": null,
         "current": {
-          "selected": false,
           "tags": [],
-          "text": "prometheus-config-reloader",
+          "text": "All",
           "value": [
-            "prometheus-config-reloader"
+            "$__all"
           ]
         },
         "datasource": "prometheus",
@@ -1468,7 +1466,7 @@
     ]
   },
   "timezone": "",
-  "title": "Memusage",
-  "uid": "sopob1d",
-  "version": 7
+  "title": "CPU and Memory Usage",
+  "uid": "sopob1a",
+  "version": 2
 }
