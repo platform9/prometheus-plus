@@ -19,6 +19,8 @@ package events
 import (
 	"os"
 	"path"
+	"strconv"
+	"sync"
 	"time"
 
 	"k8s.io/client-go/rest"
@@ -40,7 +42,7 @@ import (
 )
 
 const (
-	resyncPeriod   = 1 * time.Minute
+	resyncPeriod   = 5 * time.Minute
 	prometheusPort = 9090
 	suffixLen      = 8
 )
@@ -51,12 +53,12 @@ type Watcher struct {
 	eventInf   cache.SharedIndexInformer
 	eventQueue workqueue.RateLimitingInterface
 	eventCache map[string]*evstore
+	lock       sync.Mutex
 }
 
 type evstore struct {
 	ev        *v1.Event
 	createdAt time.Time
-	deleted   bool
 }
 
 type eventCollector struct {
@@ -84,10 +86,6 @@ func (collector *eventCollector) Describe(ch chan<- *prometheus.Desc) {
 func (collector *eventCollector) Collect(ch chan<- prometheus.Metric) {
 
 	for _, e := range collector.w.eventCache {
-		if e.deleted {
-			continue
-		}
-
 		ev := e.ev
 		ch <- prometheus.MustNewConstMetric(collector.eventMetric, prometheus.GaugeValue, float64(ev.Count),
 			ev.Namespace,
@@ -142,6 +140,7 @@ func buildWatcher(cfg *rest.Config) (*Watcher, error) {
 		eventInf:   eventInf,
 		eventQueue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), "prometheus"),
 		eventCache: map[string]*evstore{},
+		lock:       sync.Mutex{},
 	}, nil
 }
 
@@ -205,9 +204,16 @@ func (w *Watcher) Run(stopc <-chan struct{}) error {
 		return err
 	}
 
+	stop := make(chan bool)
+	done := make(chan bool)
+	go w.deleteEvents(stop, done)
+
 	w.addHandlers()
+
 	select {
 	case <-stopc:
+		stop <- true
+		<-done
 		return nil
 	}
 }
@@ -293,46 +299,31 @@ func (w *Watcher) syncEvent(key string) error {
 	}
 
 	e := obj.(*v1.Event)
-	//fmt.Printf("\n%s/%s: %d", e.Namespace, e.Name, e.Count)
+	log.Debugf("%s/%s: %d", e.Namespace, e.Name, e.Count)
+
+	w.lock.Lock()
+	defer w.lock.Unlock()
 
 	staleEvent := false
 
 	oldev, existingEvent := w.eventCache[e.Name]
 	if existingEvent {
-		//fmt.Printf("\nFound existing event: %s", e.Name)
+		log.Debugf("Found existing event: %s", e.Name)
 		if e.Count <= oldev.ev.Count {
-			//fmt.Printf("\nExisting event has not changed: %s", e.Name)
+			log.Debugf("Existing event has not changed: %s", e.Name)
 			staleEvent = true
 		}
 	}
 
 	if !existingEvent || !staleEvent {
-		//fmt.Printf("\nAdding new event %s/%s: %d", e.Namespace, e.Name, e.Count)
+		log.Debugf("Adding new event %s/%s: %d", e.Namespace, e.Name, e.Count)
 		w.eventCache[e.Name] = &evstore{
 			createdAt: time.Now(),
 			ev:        e,
-			deleted:   false,
 		}
 	}
 
-	t := time.Now()
-	for n, ev := range w.eventCache {
-		//fmt.Printf("\nChecking event %s/%s: %d", e.Namespace, e.Name, e.Count)
-		if ev.deleted {
-			if t.After(ev.createdAt.Add(60 * time.Minute)) {
-				delete(w.eventCache, n)
-			}
-			continue
-		}
-
-		if t.After(ev.createdAt.Add(15 * time.Minute)) {
-			//fmt.Printf("\nDeleting old entry: %s/%s: %d", e.Namespace, e.Name, e.Count)
-			//delete(w.eventCache, n)
-			ev.deleted = true
-		}
-	}
-
-	/*fmt.Printf("\nns: %s, \nname: %s, \nreason: %s, \nkind: %s, \ninv obj: %s, \ninv obj ns: %s,\nmsg: %s, \ncnt: %d, \nevtm: %s, \ncn: %s, \nrc: %s, \nri: %s, \nac: %s",
+	/*log.Debugf("\nns: %s, \nname: %s, \nreason: %s, \nkind: %s, \ninv obj: %s, \ninv obj ns: %s,\nmsg: %s, \ncnt: %d, \nevtm: %s, \ncn: %s, \nrc: %s, \nri: %s, \nac: %s",
 	e.Namespace,
 	e.Name,
 	e.Reason,
@@ -348,4 +339,38 @@ func (w *Watcher) syncEvent(key string) error {
 	e.Action)*/
 
 	return nil
+}
+
+func (w *Watcher) deleteEvent(retain int) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+	t := time.Now()
+	for n, ev := range w.eventCache {
+		if t.After(ev.createdAt.Add(time.Duration(retain) * time.Minute)) {
+			log.Debugf("Deleting old entry: %s/%s: %d", ev.ev.Namespace, ev.ev.Name, ev.ev.Count)
+			delete(w.eventCache, n)
+		}
+	}
+}
+
+func (w *Watcher) deleteEvents(stop, done chan bool) {
+	loop, err := strconv.Atoi(os.Getenv("EVENT_CHECK_SECS"))
+	if err != nil || loop == 0 {
+		loop = 60
+	}
+	retain, err := strconv.Atoi(os.Getenv("EVENT_RETAIN_MINS"))
+	if err != nil || retain == 0 {
+		retain = 60
+	}
+
+	ticker := time.NewTicker(time.Second * time.Duration(loop))
+	for {
+		select {
+		case <-ticker.C:
+			w.deleteEvent(retain)
+		case <-stop:
+			done <- true
+			return
+		}
+	}
 }
