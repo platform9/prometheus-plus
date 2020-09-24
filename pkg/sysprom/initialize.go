@@ -781,7 +781,6 @@ func (w *InitConfig) createGrafana() error {
 			if err := createConfigMap(w, cfgFile, monitoringNS, "home.json", w.sysCfg.configDir+"/"+cfgFile); err != nil {
 				return err
 			}
-			continue
 		}
 		if err := createConfigMap(w, cfgFile, monitoringNS, cfgFile+".json", w.sysCfg.configDir+"/"+cfgFile); err != nil {
 			return err
