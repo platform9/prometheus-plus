@@ -81,15 +81,6 @@
           },
           "orgId": 1,
           "type": "file"
-      },
-      {
-          "folder": "",
-          "name": "9",
-          "options": {
-              "path": "/grafana-dashboard-definitions/9"
-          },
-          "orgId": 1,
-          "type": "file"
       }
   ]
 }

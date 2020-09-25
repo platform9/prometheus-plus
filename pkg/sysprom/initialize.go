@@ -502,6 +502,7 @@ func (w *InitConfig) createServiceMonitor() error {
 			NamespaceSelector: monitoringv1.NamespaceSelector{
 				MatchNames: []string{
 					monitoringNS,
+					operatorsNS,
 				},
 			},
 		},
@@ -638,7 +639,8 @@ func getVolumeMounts(dashboards []string) []apiv1.VolumeMount {
 		},
 	}
 
-	for i, d := range dashboards {
+	index := 0
+	for _, d := range dashboards {
 		if d == defaultDashboard {
 			volumeMounts = append(volumeMounts, apiv1.VolumeMount{
 				Name:      d,
@@ -650,9 +652,10 @@ func getVolumeMounts(dashboards []string) []apiv1.VolumeMount {
 		}
 		volumeMounts = append(volumeMounts, apiv1.VolumeMount{
 			Name:      d,
-			MountPath: fmt.Sprintf("/grafana-dashboard-definitions/%d/%s", i, d),
+			MountPath: fmt.Sprintf("/grafana-dashboard-definitions/%d/%s", index, d),
 			ReadOnly:  false,
 		})
+		index++
 	}
 
 	return volumeMounts
@@ -781,6 +784,7 @@ func (w *InitConfig) createGrafana() error {
 			if err := createConfigMap(w, cfgFile, monitoringNS, "home.json", w.sysCfg.configDir+"/"+cfgFile); err != nil {
 				return err
 			}
+			continue
 		}
 		if err := createConfigMap(w, cfgFile, monitoringNS, cfgFile+".json", w.sysCfg.configDir+"/"+cfgFile); err != nil {
 			return err
