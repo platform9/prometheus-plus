@@ -830,7 +830,7 @@ func (w *InitConfig) createGrafana() error {
 					Containers: []apiv1.Container{
 						{
 							Name:            "proxy",
-							Image:           "nginx",
+							Image:           "nginx:stable",
 							ImagePullPolicy: "IfNotPresent",
 							Ports: []apiv1.ContainerPort{
 								{
@@ -851,7 +851,7 @@ func (w *InitConfig) createGrafana() error {
 						},
 						{
 							Name:  "grafana",
-							Image: "grafana/grafana:6.3.2",
+							Image: "grafana/grafana:7.2.0",
 							Ports: []apiv1.ContainerPort{
 								{
 									Name:          "http",
