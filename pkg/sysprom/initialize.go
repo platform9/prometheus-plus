@@ -249,29 +249,35 @@ func SetupSystemPrometheus() error {
 	syspc, err := new()
 	if err != nil {
 		log.Error(err, "when starting system prometheus controller")
+		return err
 	}
-
 	if err := syspc.getOwnerUID(); err != nil {
 		log.Error(err, "while getting parent UID")
+		return err
 	}
-
 	if err := syspc.waitForCRD(); err != nil {
 		log.Error(err, "while waiting for CRD's to come up")
+		return err
 	}
 	if err := syspc.createPrometheus(); err != nil {
 		log.Error(err, "while creating prometheus instance")
+		return err
 	}
 	if err := syspc.createPrometheusRules(); err != nil {
 		log.Error(err, "while creating prometheus rules")
+		return err
 	}
 	if err := syspc.createServiceMonitor(); err != nil {
 		log.Error(err, "while creating service-monitor instance")
+		return err
 	}
 	if err := syspc.createAlertManager(); err != nil {
 		log.Error(err, "while creating alert-manager instance")
+		return err
 	}
 	if err := syspc.createGrafana(); err != nil {
 		log.Error(err, "while creating grafana instance")
+		return err
 	}
 
 	return nil
@@ -373,9 +379,17 @@ func (w *InitConfig) createPrometheus() error {
 			},
 		},
 	}
-	_, err := prometheusClient.Create(promObject)
+
+	var options metav1.GetOptions
+	_, err := prometheusClient.Get(w.sysCfg.prometheusInstanceName, options)
 	if err != nil {
-		return fmt.Errorf("Failed to create prometheus object. Error: %v", err.Error())
+		_, err = prometheusClient.Create(promObject)
+		if err != nil {
+			log.Errorf("Failed to create prometheus object. Error: %v", err.Error())
+			return err
+		}
+	} else {
+		log.Infof("Prometheus instance: %s already exists", w.sysCfg.prometheusInstanceName)
 	}
 
 	// Creating service for sample application
@@ -402,9 +416,16 @@ func (w *InitConfig) createPrometheus() error {
 			},
 		},
 	}
-	_, err = serviceClient.Create(service)
+
+	_, err = serviceClient.Get(w.sysCfg.prometheusSvcName, options)
 	if err != nil {
-		return err
+		_, err = serviceClient.Create(service)
+		if err != nil {
+			log.Errorf("Failed to create prometheus service Error: %v", err.Error())
+			return err
+		}
+	} else {
+		log.Infof("Prometheus service: %s already exists", w.sysCfg.prometheusSvcName)
 	}
 
 	return nil
@@ -437,9 +458,16 @@ func (w *InitConfig) createPrometheusRules() error {
 		},
 	}
 
-	_, err := prometheusRulesClient.Create(promObject)
+	var options metav1.GetOptions
+	_, err := prometheusRulesClient.Get("system-prometheus-rules", options)
 	if err != nil {
-		return fmt.Errorf("Failed to create prometheus rule object. Error: %v", err.Error())
+		_, err = prometheusRulesClient.Create(promObject)
+		if err != nil {
+			log.Errorf("Failed to create prometheus rule object. Error: %v", err.Error())
+			return err
+		}
+	} else {
+		log.Info("Prometheus rule object: system-prometheus-rules already exists")
 	}
 
 	return nil
@@ -483,9 +511,16 @@ func (w *InitConfig) createServiceMonitor() error {
 		},
 	}
 
-	_, err := serviceMonitorClient.Create(svcMonObject)
+	var options metav1.GetOptions
+	_, err := serviceMonitorClient.Get("system-service-monitor", options)
 	if err != nil {
-		return fmt.Errorf("Failed to create service-monitor object. Error: %v", err.Error())
+		_, err = serviceMonitorClient.Create(svcMonObject)
+		if err != nil {
+			log.Errorf("Failed to create prometheus rule object. Error: %v", err.Error())
+			return err
+		}
+	} else {
+		log.Info("Prometheus service monitor: system-service-monitor already exists")
 	}
 
 	return nil
@@ -499,11 +534,13 @@ func (w *InitConfig) createAlertManager() error {
 
 	file, err := os.Open(w.sysCfg.configDir + "/alertmanager.yaml")
 	if err != nil {
+		log.Errorf("Failed to open alertmanager secret file Error: %v", err.Error())
 		return err
 	}
 	defer file.Close()
 	alertmgrSecret, err := ioutil.ReadAll(file)
 	if err != nil {
+		log.Errorf("Failed to read alertmanager secret file Error: %v", err.Error())
 		return err
 	}
 
@@ -533,9 +570,17 @@ func (w *InitConfig) createAlertManager() error {
 			},
 		},
 	}
-	_, err = alertMgrClient.Create(alertMgrObject)
+
+	var options metav1.GetOptions
+	_, err = alertMgrClient.Get(w.sysCfg.alertmanagerInstanceName, options)
 	if err != nil {
-		return fmt.Errorf("Failed to create alert-manager object. Error: %v", err.Error())
+		_, err = alertMgrClient.Create(alertMgrObject)
+		if err != nil {
+			log.Errorf("Failed to create alertmanager object. Error: %v", err.Error())
+			return err
+		}
+	} else {
+		log.Infof("Alertmanager object: %s already exists", w.sysCfg.alertmanagerInstanceName)
 	}
 
 	// Creating service for alert manager
@@ -562,9 +607,16 @@ func (w *InitConfig) createAlertManager() error {
 			},
 		},
 	}
-	_, err = serviceClient.Create(service)
+
+	_, err = serviceClient.Get(w.sysCfg.alertmanagerSvcName, options)
 	if err != nil {
-		return err
+		_, err = serviceClient.Create(service)
+		if err != nil {
+			log.Errorf("Failed to create Alertmanager service Error: %v", err.Error())
+			return err
+		}
+	} else {
+		log.Infof("Alertmanager service: %s already exists", w.sysCfg.alertmanagerSvcName)
 	}
 
 	return nil
@@ -726,11 +778,13 @@ func (w *InitConfig) createGrafana() error {
 	// Create Secret for Grafana
 	file, err := os.Open(w.sysCfg.configDir + "/grafana-datasources")
 	if err != nil {
+		log.Errorf("Failed to open grafana secret file Error: %v", err.Error())
 		return err
 	}
 	defer file.Close()
 	secretData, err := ioutil.ReadAll(file)
 	if err != nil {
+		log.Errorf("Failed to read grafana secret file Error: %v", err.Error())
 		return err
 	}
 
@@ -747,6 +801,7 @@ func (w *InitConfig) createGrafana() error {
 
 	dashboards, err := getDashboards(w.sysCfg.configDir)
 	if err != nil {
+		log.Errorf("Failed to get grafana dashboards Error: %v", err.Error())
 		return err
 	}
 
@@ -854,9 +909,16 @@ func (w *InitConfig) createGrafana() error {
 		},
 	}
 
-	_, err = deploymentClient.Create(deployment)
+	var options metav1.GetOptions
+	_, err = deploymentClient.Get("grafana", options)
 	if err != nil {
-		return err
+		_, err = deploymentClient.Create(deployment)
+		if err != nil {
+			log.Errorf("Failed to create grafana deployment Error: %v", err.Error())
+			return err
+		}
+	} else {
+		log.Info("grafana deployment already exists")
 	}
 
 	// Create service for grafana
@@ -881,9 +943,16 @@ func (w *InitConfig) createGrafana() error {
 			},
 		},
 	}
-	_, err = serviceClient.Create(service)
+
+	_, err = serviceClient.Get(w.sysCfg.grafanaSvcName, options)
 	if err != nil {
-		return err
+		_, err = serviceClient.Create(service)
+		if err != nil {
+			log.Errorf("Failed to create grafana service %s Error: %v", w.sysCfg.grafanaSvcName, err.Error())
+			return err
+		}
+	} else {
+		log.Infof("grafana service: %s already exists", w.sysCfg.grafanaSvcName)
 	}
 
 	return nil
@@ -903,10 +972,19 @@ func createSecret(w *InitConfig, name string, namespace string, key string, data
 			key: data,
 		},
 	}
-	_, err := secretClient.Create(secret)
+
+	var options metav1.GetOptions
+	_, err := secretClient.Get(name, options)
 	if err != nil {
-		return err
+		_, err = secretClient.Create(secret)
+		if err != nil {
+			log.Errorf("Failed to create secret %s Error: %v", name, err.Error())
+			return err
+		}
+	} else {
+		log.Infof("secret: %s already exists", name)
 	}
+
 	return nil
 }
 
@@ -931,10 +1009,19 @@ func createConfigMap(w *InitConfig, name string, namespace string, param string,
 			param: string(configData),
 		},
 	}
-	_, err = configMapClient.Create(configMap)
+
+	var options metav1.GetOptions
+	_, err = configMapClient.Get(name, options)
 	if err != nil {
-		return err
+		_, err = configMapClient.Create(configMap)
+		if err != nil {
+			log.Errorf("Failed to create configmap %s Error: %v", name, err.Error())
+			return err
+		}
+	} else {
+		log.Infof("configmap: %s already exists", name)
 	}
+
 	return nil
 }
 
