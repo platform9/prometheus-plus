@@ -359,6 +359,7 @@ func (w *InitConfig) createPrometheus() error {
 			},
 		},
 		Spec: monitoringv1.PrometheusSpec{
+			ScrapeInterval: "2m",
 			ServiceMonitorSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"prometheus": w.sysCfg.prometheusInstanceName,

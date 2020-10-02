@@ -1,4 +1,5 @@
 - job_name: kubelet
+  scrape_interval: 5m
   honor_labels: false
   scheme: https
   tls_config:
@@ -16,6 +17,7 @@
     target_label: __metrics_path__
     replacement: /metrics
 - job_name: cadvisor
+  scrape_interval: 2m
   honor_labels: false
   scheme: https
   tls_config:
@@ -34,6 +36,7 @@
     replacement: /metrics/cadvisor
 
 - job_name: apiserver
+  scrape_interval: 5m
   honor_labels: false
   scheme: https
   tls_config:
