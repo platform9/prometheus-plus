@@ -148,6 +148,7 @@ func getSystemPrometheusEnv() (systemcfg *SystemPrometheusConfig) {
 	defSvcMonLabel := []string{
 		"node-exporter",
 		"kube-state-metrics",
+		"mon-helper",
 	}
 
 	svcMonLabels := getEnv("SERVICE_MONITOR_LABELS", "")
@@ -263,10 +264,12 @@ func SetupSystemPrometheus() error {
 		log.Error(err, "while creating prometheus instance")
 		return err
 	}
+
 	if err := syspc.createPrometheusRules(); err != nil {
 		log.Error(err, "while creating prometheus rules")
 		return err
 	}
+
 	if err := syspc.createServiceMonitor(); err != nil {
 		log.Error(err, "while creating service-monitor instance")
 		return err
@@ -336,6 +339,21 @@ func (w *InitConfig) createPrometheus() error {
 	cpu, _ := resource.ParseQuantity(w.sysCfg.prometheusCPUResource)
 	mem, _ := resource.ParseQuantity(w.sysCfg.prometheusMemResource)
 
+	file, err := os.Open(w.sysCfg.configDir + "/additional-scrape-config.yaml")
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+	promSecret, err := ioutil.ReadAll(file)
+	if err != nil {
+		return err
+	}
+
+	err = createSecret(w, "scrapeconfig", monitoringNS, "additional-scrape-config.yaml", promSecret)
+	if err != nil {
+		return err
+	}
+
 	// Create Prometheus Resource
 	prometheusClient := w.mClient.MonitoringV1().Prometheuses(monitoringNS)
 	promObject := &monitoringv1.Prometheus{
@@ -347,6 +365,7 @@ func (w *InitConfig) createPrometheus() error {
 			},
 		},
 		Spec: monitoringv1.PrometheusSpec{
+			ScrapeInterval: "2m",
 			ServiceMonitorSelector: &metav1.LabelSelector{
 				MatchLabels: map[string]string{
 					"prometheus": w.sysCfg.prometheusInstanceName,
@@ -377,11 +396,17 @@ func (w *InitConfig) createPrometheus() error {
 					},
 				},
 			},
+			AdditionalScrapeConfigs: &apiv1.SecretKeySelector{
+				Key: "additional-scrape-config.yaml",
+				LocalObjectReference: apiv1.LocalObjectReference{
+					Name: "scrapeconfig",
+				},
+			},
 		},
 	}
 
 	var options metav1.GetOptions
-	_, err := prometheusClient.Get(w.sysCfg.prometheusInstanceName, options)
+	_, err = prometheusClient.Get(w.sysCfg.prometheusInstanceName, options)
 	if err != nil {
 		_, err = prometheusClient.Create(promObject)
 		if err != nil {
@@ -506,6 +531,7 @@ func (w *InitConfig) createServiceMonitor() error {
 			NamespaceSelector: monitoringv1.NamespaceSelector{
 				MatchNames: []string{
 					monitoringNS,
+					operatorsNS,
 				},
 			},
 		},
@@ -666,7 +692,8 @@ func getVolumeMounts(dashboards []string) []apiv1.VolumeMount {
 		},
 	}
 
-	for i, d := range dashboards {
+	index := 0
+	for _, d := range dashboards {
 		if d == defaultDashboard {
 			volumeMounts = append(volumeMounts, apiv1.VolumeMount{
 				Name:      d,
@@ -678,9 +705,10 @@ func getVolumeMounts(dashboards []string) []apiv1.VolumeMount {
 		}
 		volumeMounts = append(volumeMounts, apiv1.VolumeMount{
 			Name:      d,
-			MountPath: fmt.Sprintf("/grafana-dashboard-definitions/%d/%s", i, d),
+			MountPath: fmt.Sprintf("/grafana-dashboard-definitions/%d/%s", index, d),
 			ReadOnly:  false,
 		})
+		index++
 	}
 
 	return volumeMounts
@@ -858,7 +886,7 @@ func (w *InitConfig) createGrafana() error {
 					Containers: []apiv1.Container{
 						{
 							Name:            "proxy",
-							Image:           "nginx",
+							Image:           "nginx:stable",
 							ImagePullPolicy: "IfNotPresent",
 							Ports: []apiv1.ContainerPort{
 								{
@@ -879,7 +907,7 @@ func (w *InitConfig) createGrafana() error {
 						},
 						{
 							Name:  "grafana",
-							Image: "grafana/grafana:6.3.2",
+							Image: "grafana/grafana:7.2.0",
 							Ports: []apiv1.ContainerPort{
 								{
 									Name:          "http",

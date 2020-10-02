@@ -19,12 +19,15 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 
-	prometheus "github.com/platform9/prometheus-plus/pkg/prometheus"
+	events "github.com/platform9/prometheus-plus/pkg/events"
 	"github.com/platform9/prometheus-plus/pkg/sysprom"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -56,15 +59,21 @@ func Main() int {
 		log.Info("Successfully installed system prometheus")
 	}
 
-	pc, err := prometheus.New()
+	ev, err := events.New()
 	if err != nil {
 		log.Error(err, "when starting controller...")
 		return 1
 	}
 
+	prometheus.MustRegister(events.NewEventCollector(ev))
+	http.Handle("/metrics", promhttp.Handler())
+	go func() {
+		http.ListenAndServe(":8080", nil)
+	}()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	wg, ctx := errgroup.WithContext(ctx)
-	wg.Go(func() error { return pc.Run(ctx.Done()) })
+	wg.Go(func() error { return ev.Run(ctx.Done()) })
 
 	term := make(chan os.Signal)
 	signal.Notify(term, os.Interrupt, syscall.SIGTERM)

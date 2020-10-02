@@ -27,6 +27,60 @@
           },
           "orgId": 1,
           "type": "file"
+      },
+      {
+          "folder": "",
+          "name": "3",
+          "options": {
+              "path": "/grafana-dashboard-definitions/3"
+          },
+          "orgId": 1,
+          "type": "file"
+      },
+      {
+          "folder": "",
+          "name": "4",
+          "options": {
+              "path": "/grafana-dashboard-definitions/4"
+          },
+          "orgId": 1,
+          "type": "file"
+      },
+      {
+          "folder": "",
+          "name": "5",
+          "options": {
+              "path": "/grafana-dashboard-definitions/5"
+          },
+          "orgId": 1,
+          "type": "file"
+      },
+      {
+          "folder": "",
+          "name": "6",
+          "options": {
+              "path": "/grafana-dashboard-definitions/6"
+          },
+          "orgId": 1,
+          "type": "file"
+      },      
+      {
+          "folder": "",
+          "name": "7",
+          "options": {
+              "path": "/grafana-dashboard-definitions/7"
+          },
+          "orgId": 1,
+          "type": "file"
+      },      
+      {
+          "folder": "",
+          "name": "8",
+          "options": {
+              "path": "/grafana-dashboard-definitions/8"
+          },
+          "orgId": 1,
+          "type": "file"
       }
   ]
 }
