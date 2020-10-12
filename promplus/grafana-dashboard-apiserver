@@ -232,7 +232,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(apiserver_request_total{job=\"apiserver\",code=~\"[45]..\"}[5m]))",
+          "expr": "sum(rate(apiserver_request_total{job=\"apiserver\",code=~\"[45]..\"}[10m]))",
           "legendFormat": "Failed request rate",
           "refId": "A"
         }
@@ -318,7 +318,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(apiserver_request_total{job=\"apiserver\",code=~\"2..\"}[5m]))",
+          "expr": "sum(rate(apiserver_request_total{job=\"apiserver\",code=~\"2..\"}[10m]))",
           "legendFormat": "Successfull request rate",
           "refId": "A"
         }
@@ -405,17 +405,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(workqueue_work_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(workqueue_work_duration_seconds_bucket[10m])) by (le))",
           "legendFormat": "p95",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.9, sum(rate(workqueue_work_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.9, sum(rate(workqueue_work_duration_seconds_bucket[10m])) by (le))",
           "legendFormat": "p90",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.5, sum(rate(workqueue_work_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.5, sum(rate(workqueue_work_duration_seconds_bucket[10m])) by (le))",
           "legendFormat": "p50",
           "refId": "C"
         }
@@ -502,17 +502,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(workqueue_queue_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(workqueue_queue_duration_seconds_bucket[10m])) by (le))",
           "legendFormat": "p95",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.90, sum(rate(workqueue_queue_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.90, sum(rate(workqueue_queue_duration_seconds_bucket[10m])) by (le))",
           "legendFormat": "p90",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.5, sum(rate(workqueue_queue_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.5, sum(rate(workqueue_queue_duration_seconds_bucket[10m])) by (le))",
           "legendFormat": "p50",
           "refId": "C"
         }
@@ -599,7 +599,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum(rate(apiserver_request_total[5m])) by (verb)",
+          "expr": "sum(rate(apiserver_request_total[10m])) by (verb)",
           "legendFormat": "{{verb}}",
           "refId": "A"
         }
@@ -685,7 +685,7 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "sum by (resource) (rate(apiserver_request_total[5m]))",
+          "expr": "sum by (resource) (rate(apiserver_request_total[10m]))",
           "legendFormat": "{{resource}}",
           "refId": "A"
         }
@@ -773,17 +773,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(apiserver_request_duration_seconds_bucket{verb!~\"CONNECT|WATCH\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(apiserver_request_duration_seconds_bucket{verb!~\"CONNECT|WATCH\"}[10m])) by (le))",
           "legendFormat": "p95",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.90, sum(rate(apiserver_request_duration_seconds_bucket{verb!~\"CONNECT|WATCH\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.90, sum(rate(apiserver_request_duration_seconds_bucket{verb!~\"CONNECT|WATCH\"}[10m])) by (le))",
           "legendFormat": "p90",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.5, sum(rate(apiserver_request_duration_seconds_bucket{verb!~\"CONNECT|WATCH\"}[5m])) by (le))",
+          "expr": "histogram_quantile(0.5, sum(rate(apiserver_request_duration_seconds_bucket{verb!~\"CONNECT|WATCH\"}[10m])) by (le))",
           "legendFormat": "p50 ",
           "refId": "C"
         }
@@ -961,17 +961,17 @@
       "steppedLine": false,
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, sum(rate(etcd_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.95, sum(rate(etcd_request_duration_seconds_bucket[10m])) by (le))",
           "legendFormat": "p95",
           "refId": "A"
         },
         {
-          "expr": "histogram_quantile(0.90, sum(rate(etcd_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.90, sum(rate(etcd_request_duration_seconds_bucket[10m])) by (le))",
           "legendFormat": "p90",
           "refId": "B"
         },
         {
-          "expr": "histogram_quantile(0.5, sum(rate(etcd_request_duration_seconds_bucket[5m])) by (le))",
+          "expr": "histogram_quantile(0.5, sum(rate(etcd_request_duration_seconds_bucket[10m])) by (le))",
           "legendFormat": "p50",
           "refId": "C"
         }
