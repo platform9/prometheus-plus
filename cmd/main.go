@@ -65,6 +65,10 @@ func Main() int {
 		return 1
 	}
 
+	http.HandleFunc("/v1/describe", func(w http.ResponseWriter, req *http.Request) {
+		ev.Describe(w, req)
+	})
+
 	prometheus.MustRegister(events.NewEventCollector(ev))
 	http.Handle("/metrics", promhttp.Handler())
 	go func() {
