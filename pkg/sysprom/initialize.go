@@ -52,6 +52,7 @@ const (
 	monitoringNS     = "pf9-monitoring"
 	operatorsNS      = "pf9-operators"
 	defaultDashboard = "grafana-dashboard-cluster-explorer"
+	ownerCfgMap      = "monitoring-owner"
 )
 
 //SystemPrometheusConfig stores system prometheus configuration
@@ -143,7 +144,7 @@ func getSystemPrometheusEnv() (systemcfg *SystemPrometheusConfig) {
 
 	syscfg.prometheusRetentionTime = getEnv("PROMETHEUS_RETENTION_TIME", "7d")
 
-	syscfg.ownerInstanceName = getEnv("OWNER_INSTANCE_NAME", "monhelper")
+	syscfg.ownerInstanceName = getEnv("OWNER_INSTANCE_NAME", "monitoring-owner")
 
 	defSvcMonLabel := []string{
 		"node-exporter",
@@ -324,12 +325,16 @@ func (w *InitConfig) waitForCRD() error {
 
 // getOwnerUID gets UID of the owner resource
 func (w *InitConfig) getOwnerUID() error {
-	deploymentClient := w.client.AppsV1().Deployments(operatorsNS)
-	data, err := deploymentClient.Get(w.sysCfg.ownerInstanceName, metav1.GetOptions{})
+
+	configMapClient := w.client.CoreV1().ConfigMaps(monitoringNS)
+	var options metav1.GetOptions
+	cfgMap, err := configMapClient.Get(ownerCfgMap, options)
 	if err != nil {
+		log.Infof("Failed to get owner configmap: %s", ownerCfgMap)
 		return err
 	}
-	w.sysCfg.ownerInstanceUID = data.ObjectMeta.UID
+
+	w.sysCfg.ownerInstanceUID = cfgMap.ObjectMeta.UID
 	return nil
 }
 
@@ -1057,10 +1062,10 @@ func boolPtr(i bool) *bool { return &i }
 
 func getDefaultOwnerRefs(w *InitConfig) metav1.OwnerReference {
 	return metav1.OwnerReference{
-		APIVersion:         "apps/v1",
+		APIVersion:         "v1",
 		BlockOwnerDeletion: boolPtr(false),
 		Controller:         boolPtr(false),
-		Kind:               "Deployment",
+		Kind:               "ConfigMap",
 		Name:               w.sysCfg.ownerInstanceName,
 		UID:                w.sysCfg.ownerInstanceUID,
 	}
