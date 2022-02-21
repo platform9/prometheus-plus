@@ -1,5 +1,5 @@
 
-FROM alpine:latest
+FROM alpine:3.15
 
 COPY build/bin/promplus /bin/
 

@@ -6,6 +6,7 @@ pkg=cmd/main.go
 go_cmd=go
 repo=platform9
 image_name=monhelper
+version=v3.0.1
 
 .PHONY: all
 all: test binary
@@ -26,5 +27,5 @@ test:
 
 image: go_cmd = GOOS=linux GOARCH=amd64 go
 image: binary
-	docker build -t ${repo}/${image_name} .
+	docker build -t ${repo}/${image_name}:${version} .
 

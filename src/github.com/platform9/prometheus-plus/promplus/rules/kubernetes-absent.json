@@ -1,0 +1,29 @@
+  {
+    "name": "kubernetes-absent",
+    "rules": [
+      {
+        "alert": "KubeStateMetricsDown",
+        "annotations": {
+          "message": "KubeStateMetrics has disappeared from Prometheus target discovery.",
+          "runbook_url": "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-kubestatemetricsdown"
+        },
+        "expr": "absent(up{job=\"kube-state-metrics\"} == 1)\n",
+        "for": "15m",
+        "labels": {
+          "severity": "critical"
+        }
+      },
+      {
+        "alert": "NodeExporterDown",
+        "annotations": {
+          "message": "NodeExporter has disappeared from Prometheus target discovery.",
+          "runbook_url": "https://github.com/kubernetes-monitoring/kubernetes-mixin/tree/master/runbook.md#alert-name-nodeexporterdown"
+        },
+        "expr": "absent(up{job=\"node-exporter\"} == 1)\n",
+        "for": "15m",
+        "labels": {
+          "severity": "critical"
+        }
+      }
+    ]
+  }
