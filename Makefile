@@ -32,8 +32,7 @@ binary: ${build_dir}
 test:
 	go test ./pkg/...
 
-image: go_cmd = GOOS=linux GOARCH=amd64 go
-image: binary
+image:
 	@echo $(TAG)
 	docker build -t $(TAG) .
 
