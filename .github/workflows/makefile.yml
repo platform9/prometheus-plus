@@ -21,4 +21,4 @@ jobs:
       run: make binary
 
     - name: Run tests
-      run: make tests
+      run: make test
